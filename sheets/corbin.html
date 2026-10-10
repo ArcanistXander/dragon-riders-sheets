@@ -192,6 +192,20 @@ dl.kv dd { margin: 0; min-width: 0; }
 .modal header h2 { font-size: 1.4rem; }
 .modal .mb { padding: 14px 20px; display: flex; flex-direction: column; gap: 16px; }
 .modal footer { padding: 12px 20px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+/* Conditions */
+.conds { margin-bottom: 14px; }
+.cchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cchip { border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); border-radius: 99px; padding: 3px 11px; font-size: .88rem; }
+.cchip:hover { border-color: var(--bad); color: var(--ink); }
+.cchip.on { background: var(--bad); border-color: var(--bad); color: var(--panel); font-weight: 700; }
+ul.effects { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+ul.effects li { font-size: .85rem; padding: 3px 10px; border-radius: 6px; background: var(--panel-2); border-left: 3px solid var(--muted); }
+ul.effects li.bad { border-left-color: var(--bad); background: var(--bad-soft); }
+ul.effects li.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+ul.effects li.ok { border-left-color: var(--good); background: var(--good-soft); }
+details summary { cursor: pointer; color: var(--muted); }
+.icon-btn.edit:hover { color: var(--bronze); background: var(--bronze-soft); }
+
 /* Level-up wizard */
 .modal.lu { max-width: 880px; }
 .lu-nav { display: flex; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--panel-2); }
@@ -272,6 +286,7 @@ table.prog tr.cur td, table.prog td.cur { background: var(--bronze-soft); color:
 <script src="data/class-cleric.js"></script>
 <script src="data/spells-cleric.js"></script>
 <script src="data/feats-2014.js"></script>
+<script src="data/weapons-2014.js"></script>
 <script src="data/dragons.js"></script>
 <script src="data/char-corbin.js"></script>
 <script src="engine.js"></script>

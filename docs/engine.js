@@ -73,6 +73,13 @@
     s.exhaustion = s.exhaustion || 0;
     s.conditions = s.conditions || "";
     s.heroPoints = Math.max(0, Math.min(3, +s.heroPoints || 0));
+    s.diceMode = s.diceMode === "digital" ? "digital" : "physical";
+    if (!Array.isArray(s.conds)) { s.conds = []; if (s.conditions && s.conditionsNote == null) s.conditionsNote = s.conditions; }
+    s.conditionsNote = s.conditionsNote || "";
+    s.attacks.forEach((w) => {
+      if (!w.kind) w.kind = w.ability === "dex" ? "ranged" : "melee";
+      if (w.name === "Dagger" && w.range == null) { w.range = "20/60"; w.props = "Finesse, light, thrown"; if (/thrown/i.test(w.notes || "")) w.notes = ""; }
+    });
     return s;
   }
   try { const raw = lsGet(LS_KEY); S = raw ? migrate(JSON.parse(raw)) : migrate(clone(window.DEFAULT_CHARACTER)); }
@@ -136,8 +143,11 @@
     });
     D.fx = fx;
     D.init = mods.dex + (+s.initMisc || 0) + fx.init;
-    D.speed = (+s.speed || 0) + fx.speed;
-    D.hpMax = s.hp.rolls.reduce((x, y) => x + (+y || 0), 0) + total * (mods.con + fx.hpPerLevel) + (+s.hp.misc || 0);
+    D.eff = conditionEffects(s);
+    D.baseSpeed = (+s.speed || 0) + fx.speed;
+    D.speed = D.eff.speedZero.length ? 0 : D.eff.speedHalf.length ? Math.floor(D.baseSpeed / 2) : D.baseSpeed;
+    D.baseHpMax = s.hp.rolls.reduce((x, y) => x + (+y || 0), 0) + total * (mods.con + fx.hpPerLevel) + (+s.hp.misc || 0);
+    D.hpMax = D.eff.hpHalf.length ? Math.floor(D.baseHpMax / 2) : D.baseHpMax;
     D.hitDice = s.classes.map((c) => c.level + "d" + CLASSES[c.id].hitDie).join(" + ");
     D.save = (k) => mods[k] + (s.saveProf.includes(k) || fx.saves.includes(k) ? pb : 0);
     D.skill = (k, ab) => mods[ab] + Math.floor((s.skills[k] || 0) * pb);
@@ -279,13 +289,24 @@
     $("#toasts").appendChild(el); setTimeout(() => el.remove(), ms);
     while ($("#toasts").children.length > 4) $("#toasts").firstChild.remove();
   }
-  function d20(label, bonus, extra) {
+  /* Real dice are the default. "Sheet rolls" is opt-in. */
+  const physical = () => S.diceMode !== "digital";
+  /* kind: { type: "attack" | "check" | "save", ab } lets conditions set advantage, disadvantage or auto-fail. */
+  function d20(label, bonus, extra, physExtra, kind) {
+    const st = rollState(kind, derive());
+    if (st.fail.length) { toast(`${esc(label)}: automatic failure`, `Because you are ${esc([...new Set(st.fail)].join(", ").toLowerCase())}.`); return; }
+    const how = st.mode === "adv" ? "with advantage" : st.mode === "dis" ? "with disadvantage" : "";
+    const why = st.why && st.mode !== "normal" ? ` (${esc(st.why)})` : st.why ? ` · ${esc(st.why)}` : "";
+    if (physical()) {
+      toast(`${esc(label)}: d20 <b class="num">${sg(bonus)}</b>${how ? ` ${how}` : ""}`, [how ? `Roll two d20s and keep the ${st.mode === "adv" ? "higher" : "lower"}${why}` : "", physExtra || ""].filter(Boolean).join(" · "));
+      return;
+    }
     const a = rnd(20), b = rnd(20); let pick = a, note = "";
-    if (UI.rollMode === "adv") { pick = Math.max(a, b); note = ` (adv: ${a}, ${b})`; }
-    if (UI.rollMode === "dis") { pick = Math.min(a, b); note = ` (dis: ${a}, ${b})`; }
+    if (st.mode === "adv") { pick = Math.max(a, b); note = ` (advantage: ${a}, ${b})`; }
+    if (st.mode === "dis") { pick = Math.min(a, b); note = ` (disadvantage: ${a}, ${b})`; }
     const lucky = pick === 1 && S.traits.some((t) => t.name === "Lucky") ? " · Natural 1: Lucky lets you reroll" : "";
     const crit = pick === 20 ? " · Natural 20!" : "";
-    toast(`${esc(label)}: <b class="num">${pick + bonus}</b>`, `d20 ${pick}${note} ${sg(bonus)}${crit}${lucky}${extra ? " · " + extra : ""}`);
+    toast(`${esc(label)}: <b class="num">${pick + bonus}</b>`, `d20 ${pick}${note}${why} ${sg(bonus)}${crit}${lucky}${extra ? " · " + extra : ""}`);
   }
 
   /* ---------- rendering ---------- */
@@ -293,7 +314,7 @@
     const D = derive();
     const act = document.activeElement; const fid = act && act.id; let sel = null;
     try { sel = fid && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null; } catch (e) { sel = null; }
-    $("#app").innerHTML = header(D) + vitals(D) + tabs() + `<div id="page">${page(D)}</div>`;
+    $("#app").innerHTML = header(D) + vitals(D) + condStrip(D) + tabs() + `<div id="page">${page(D)}</div>`;
     if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not text */ } } }
   }
   function classLine(D) {
@@ -328,7 +349,7 @@
     return `<section class="vitals" aria-label="Combat stats"><div class="tiles">
       ${UI.edit ? `<div class="stat"><span class="label">Armor class</span><span class="v num">${D.ac}</span><button class="btn sm" data-act="tab" data-tab="overview">Armor ↓</button></div>` : tile("Armor class", D.ac)}
       <div class="stat" style="cursor:pointer" data-act="rollInit"><span class="label">Initiative</span><span class="v">${sg(D.init)}</span></div>
-      ${tile("Speed", D.speed + "<small style='font-size:.9rem'> ft</small>")}
+      <div class="stat"><span class="label">Speed</span><span class="v" style="${D.speed !== D.baseSpeed ? "color:var(--bad)" : ""}">${D.speed}<small style="font-size:.9rem"> ft</small></span>${D.speed !== D.baseSpeed ? `<span class="small muted">normally ${D.baseSpeed}</span>` : ""}</div>
       ${tile("Proficiency", sg(D.pb))}
       ${tile("Spell DC", c ? c.dc : "—")}
       ${tile("Spell attack", c ? sg(c.atk) : "—")}
@@ -338,7 +359,7 @@
         <span class="small muted num">${S.heroPoints} / 3</span></div>
       </div>
       <div class="stat hp" style="text-align:left;padding:10px 14px">
-        <div><span class="label">Hit points</span><div class="hp-big">${S.hp.current}<small> / ${D.hpMax}</small>${S.hp.temp ? ` <small style="color:var(--arc)">+${S.hp.temp} temp</small>` : ""}</div></div>
+        <div><span class="label">Hit points</span><div class="hp-big">${Math.min(S.hp.current, D.hpMax)}<small> / ${D.hpMax}</small>${S.hp.temp ? ` <small style="color:var(--arc)">+${S.hp.temp} temp</small>` : ""}</div></div>
         <div class="hp-ctl">
           <input id="hp-amt" class="f n" type="number" min="0" inputmode="numeric" aria-label="Amount" placeholder="0">
           <button class="btn sm" data-act="hp" data-k="dmg">Damage</button>
@@ -352,18 +373,18 @@
             <span style="color:var(--good)" aria-hidden="true">✓</span><span class="pips">${[0, 1, 2].map((i) => `<button class="pip good ${S.death.s > i ? "on" : ""}" data-act="death" data-k="s" data-i="${i}" aria-label="Success ${i + 1}"></button>`).join("")}</span>
             <span style="color:var(--bad);margin-left:4px" aria-hidden="true">✕</span><span class="pips">${[0, 1, 2].map((i) => `<button class="pip bad ${S.death.f > i ? "on" : ""}" data-act="death" data-k="f" data-i="${i}" aria-label="Failure ${i + 1}"></button>`).join("")}</span>
           </span>
-          <label>Exhaustion <select id="f-exhaustion" class="f" style="width:auto;padding:1px 4px" data-bind="exhaustion" data-num="1">${[0, 1, 2, 3, 4, 5, 6].map((n) => `<option ${S.exhaustion == n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-          <span class="seg" role="group" aria-label="Roll mode">${["normal", "adv", "dis"].map((m) => `<button data-act="rollMode" data-k="${m}" aria-pressed="${UI.rollMode === m}">${{ normal: "Normal", adv: "Adv", dis: "Dis" }[m]}</button>`).join("")}</span>
+          <span class="seg" role="group" aria-label="Dice"><button data-act="diceMode" data-k="physical" aria-pressed="${physical()}" title="Buttons show what to roll; you roll real dice">Roll my own dice</button><button data-act="diceMode" data-k="digital" aria-pressed="${!physical()}" title="Buttons roll for you">Sheet rolls</button></span>
+          ${physical() ? "" : `<span class="seg" role="group" aria-label="Roll mode">${["normal", "adv", "dis"].map((m) => `<button data-act="rollMode" data-k="${m}" aria-pressed="${UI.rollMode === m}">${{ normal: "Normal", adv: "Adv", dis: "Dis" }[m]}</button>`).join("")}</span>`}
         </div>
       </div>
     </section>`;
   }
   function tabs() {
-    const T = [["overview", "Overview"], ["spells", "Spells"], ["features", "Features"], ["dragon", "Dragon bond"], ["inventory", "Inventory"], ["story", "Story & art"]];
+    const T = [["overview", "Overview"], ["attacks", "Attacks"], ["spells", "Spells"], ["features", "Features"], ["dragon", "Dragon bond"], ["inventory", "Inventory"], ["story", "Story & art"]];
     return `<nav class="tabs" role="tablist">${T.map(([k, n]) => `<button role="tab" class="tab ${k === "dragon" ? "dragon-tab" : ""}" aria-selected="${UI.tab === k}" data-act="tab" data-tab="${k}">${n}</button>`).join("")}</nav>`;
   }
   function page(D) {
-    return ({ overview, spells, features, dragon, inventory, story }[UI.tab] || overview)(D);
+    return ({ overview, attacks, spells, features, dragon, inventory, story }[UI.tab] || overview)(D);
   }
   const inp = (path, opts = {}) => {
     const v = getPath(S, path);
@@ -381,33 +402,17 @@
       </div>`).join("");
     const saves = ABIL.map((a) => `<div class="row" data-act="rollSave" data-k="${a}">
         ${UI.edit ? `<input type="checkbox" class="chk" data-act="saveProf" data-k="${a}" ${S.saveProf.includes(a) ? "checked" : ""} aria-label="${ABIL_NAME[a]} save proficiency">` : `<span class="dot ${S.saveProf.includes(a) || D.fx.saves.includes(a) ? "p" : ""}"></span>`}
-        <span class="b">${sg(D.save(a))}</span><span>${ABIL_NAME[a]}</span><span></span></div>`).join("");
+        <span class="b">${sg(D.save(a))}</span><span>${ABIL_NAME[a]}</span><span class="tag" style="color:var(--bad)">${D.eff.saveFail[a].length ? "auto-fail" : D.eff.saveDis[a].length ? "disadv." : ""}</span></div>`).join("");
     const skills = SKILLS.map(([k, n, ab]) => {
       const p = S.skills[k] || 0;
       return `<div class="row" data-act="rollSkill" data-k="${k}">
         ${UI.edit ? `<button class="dot ${p === 2 ? "e" : p ? "p" : ""}" style="padding:0" data-act="skillProf" data-k="${k}" aria-label="Cycle ${n} proficiency" title="None → proficient → expertise"></button>` : `<span class="dot ${p === 2 ? "e" : p ? "p" : ""}"></span>`}
         <span class="b">${sg(D.skill(k, ab))}</span><span>${n}</span><span class="tag">${ab}</span></div>`;
     }).join("");
-    const atkRows = S.attacks.map((w, i) => {
-      const am = w.ability === "finesse" ? Math.max(D.mods.str, D.mods.dex) : w.ability === "spell" ? (D.caster ? D.mods[D.caster.ability] : 0) : D.mods[w.ability] || 0;
-      const hit = am + (w.prof ? D.pb : 0) + (+w.magic || 0);
-      const dmgMod = w.ability === "spell" ? 0 : am + (+w.magic || 0);
-      const dmg = /d/.test(w.dice) ? `${w.dice}${dmgMod ? sg(dmgMod) : ""}` : String(Math.max(0, (+w.dice || 0) + dmgMod));
-      if (UI.edit) return `<tr>
-        <td><input id="f-atk-${i}-name" class="f" data-bind="attacks.${i}.name" value="${esc(w.name)}" aria-label="Attack name"></td>
-        <td><select id="f-atk-${i}-ab" class="f" data-bind="attacks.${i}.ability" aria-label="Ability">${["str", "dex", "finesse", "spell"].map((o) => `<option ${w.ability === o ? "selected" : ""}>${o}</option>`).join("")}</select>
-            <label class="small"><input type="checkbox" class="chk" data-bindchk="attacks.${i}.prof" ${w.prof ? "checked" : ""}> prof</label></td>
-        <td><input id="f-atk-${i}-dice" class="f" style="width:5em" data-bind="attacks.${i}.dice" value="${esc(w.dice)}" aria-label="Damage dice"> <input id="f-atk-${i}-type" class="f" style="width:7em" data-bind="attacks.${i}.type" value="${esc(w.type)}" aria-label="Damage type"></td>
-        <td><input id="f-atk-${i}-notes" class="f" data-bind="attacks.${i}.notes" value="${esc(w.notes)}" aria-label="Notes"></td>
-        <td><button class="icon-btn" data-act="delAttack" data-i="${i}" aria-label="Remove ${esc(w.name)}">✕</button></td></tr>`;
-      return `<tr class="click" data-act="rollAttack" data-i="${i}" data-hit="${hit}" data-dmg="${esc(dmg)}">
-        <td><b>${esc(w.name)}</b></td><td class="num">${sg(hit)}</td><td class="num">${esc(dmg)} ${esc(w.type)}</td><td class="small muted">${esc(w.notes)}</td><td></td></tr>`;
-    }).join("");
-    const cantripRows = (S.cantrips || []).map((n) => SPELL_INDEX[n]).filter((sp) => sp && sp.x.cantrip).map((sp) => {
-      const dice = cantripDice(sp, D);
-      return `<tr class="click" data-act="castCantrip" data-name="${esc(sp.name)}"><td><b>${esc(sp.name)}</b></td><td class="num">${sp.x.cantrip.save ? sp.x.cantrip.save.toUpperCase() + " " + D.caster.dc : sg(D.caster.atk)}</td><td class="num">${dice} ${sp.x.cantrip.type}</td><td class="small muted">${esc(sp.range)}, cantrip</td><td></td></tr>`;
-    }).join("");
-    const ds = D.classes.find((c) => c.feats.some((f) => f.name === "Divine Strike"));
+    const cs = rollState({ type: "check" }, D);
+    const checkChip = cs.mode === "dis" ? `<span class="chip warn" title="${esc(cs.why)}">Disadvantage</span>` : "";
+    const anySave = ABIL.some((a) => D.eff.saveFail[a].length || D.eff.saveDis[a].length);
+    const saveChip = anySave ? `<span class="chip warn">Affected by conditions</span>` : "";
     const armor = UI.edit ? `<div class="inline-grid" style="margin-top:8px">
         <label class="small">Armor ${inp("armor.name", { label: "Armor name" })}</label>
         <label class="small">Base AC ${inp("armor.base", { num: 1, label: "Base AC" })}</label>
@@ -422,11 +427,11 @@
     return `<div class="grid3">
       <div class="stack">
         <section class="panel"><h2>Abilities</h2><div class="abil">${abil}</div></section>
-        <section class="panel"><h2>Saving throws</h2><div class="rows">${saves}</div>
+        <section class="panel"><div class="ph"><h2>Saving throws</h2>${saveChip}</div><div class="rows">${saves}</div>
           <p class="small muted" style="margin:8px 4px 0">Advantage vs. frightened (Brave) and poison (Stout Resilience).</p></section>
       </div>
       <div class="stack">
-        <section class="panel"><h2>Skills</h2><div class="rows">${skills}</div>
+        <section class="panel"><div class="ph"><h2>Skills</h2>${checkChip}</div><div class="rows">${skills}</div>
           <div class="passives">
             <div class="stat"><span class="label">Passive perception</span><span class="v">${D.passive("perception", "wis")}</span></div>
             <div class="stat"><span class="label">Passive insight</span><span class="v">${D.passive("insight", "wis")}</span></div>
@@ -435,16 +440,12 @@
         </section>
       </div>
       <div class="stack">
-        <section class="panel"><div class="ph"><h2>Attacks & cantrips</h2>${UI.edit ? `<button class="btn sm" data-act="addAttack">Add attack</button>` : `<span class="small muted">Click a row to roll</span>`}</div>
-          <div class="tw"><table class="t"><thead><tr><th>Name</th><th>Hit / DC</th><th>Damage</th><th>Notes</th><th></th></tr></thead><tbody>${atkRows}${UI.edit ? "" : cantripRows}</tbody></table></div>
-          ${ds ? `<p class="small" style="margin:8px 0 0"><b>Divine Strike:</b> once per turn, +${ds.level >= 14 ? "2d8" : "1d8"} radiant on a weapon hit.</p>` : ""}
-        </section>
         <section class="panel"><h2>Armor & defenses</h2>
           <dl class="kv">
             <dt>Armor</dt><dd>${esc(S.armor.name)}${S.armor.shield ? " + shield" : ""} · AC ${D.ac}${S.armor.note ? ` <span class="muted small">(${esc(S.armor.note)})</span>` : ""}</dd>
             <dt>Defenses</dt><dd>${UI.edit ? inp("defenses", { label: "Defenses" }) : esc(S.defenses)}</dd>
             <dt>Senses</dt><dd>${UI.edit ? inp("senses", { label: "Senses", ph: "e.g. Darkvision 60 ft." }) : esc(S.senses || "—")}</dd>
-            <dt>Conditions</dt><dd>${inp("conditions", { label: "Conditions", ph: "None" })}</dd>
+            <dt>Other effects</dt><dd>${inp("conditionsNote", { label: "Other effects", ph: "Spells or effects on you, e.g. Bless" })}</dd>
           </dl>${armor}
         </section>
         <section class="panel"><h2>Proficiencies</h2>
@@ -461,6 +462,169 @@
   function cantripDice(sp, D) {
     const n = 1 + (D.total >= 5) + (D.total >= 11) + (D.total >= 17);
     return n + sp.x.cantrip.dice;
+  }
+
+  /* ---------- conditions (2014 PHB, Appendix A) ---------- */
+  const CONDITIONS = [
+    ["blinded", "Blinded", { atkDis: 1 }, "You can't see and automatically fail checks that need sight. Your attacks have disadvantage; attacks against you have advantage."],
+    ["charmed", "Charmed", {}, "You can't attack the charmer or target it with harmful abilities or magic. The charmer has advantage on social checks against you."],
+    ["deafened", "Deafened", {}, "You can't hear and automatically fail checks that need hearing."],
+    ["frightened", "Frightened", { atkDis: 1, checkDis: 1 }, "Disadvantage on ability checks and attacks while the source is in sight. You can't willingly move closer to it."],
+    ["grappled", "Grappled", { speedZero: 1 }, "Your speed is 0. Ends if the grappler is incapacitated or you're moved out of its reach."],
+    ["incapacitated", "Incapacitated", { cantAct: 1 }, "You can't take actions or reactions."],
+    ["invisible", "Invisible", { atkAdv: 1 }, "You can't be seen without magic or special senses. Your attacks have advantage; attacks against you have disadvantage."],
+    ["paralyzed", "Paralyzed", { cantAct: 1, speedZero: 1, failStrDex: 1 }, "Incapacitated and can't move or speak. You fail STR and DEX saves. Attacks against you have advantage, and hits from within 5 ft are critical hits."],
+    ["petrified", "Petrified", { cantAct: 1, speedZero: 1, failStrDex: 1 }, "Turned to stone: incapacitated, can't move or speak, unaware of surroundings. You fail STR and DEX saves, resist all damage, and are immune to poison and disease. Attacks against you have advantage."],
+    ["poisoned", "Poisoned", { atkDis: 1, checkDis: 1 }, "Disadvantage on attack rolls and ability checks."],
+    ["prone", "Prone", { atkDis: 1 }, "You can only crawl unless you stand up (costs half your speed). Your attacks have disadvantage. Melee attacks within 5 ft have advantage against you; other attacks have disadvantage."],
+    ["restrained", "Restrained", { speedZero: 1, atkDis: 1, dexSaveDis: 1 }, "Your speed is 0. Your attacks and DEX saves have disadvantage; attacks against you have advantage."],
+    ["stunned", "Stunned", { cantAct: 1, speedZero: 1, failStrDex: 1 }, "Incapacitated, can't move, and can speak only falteringly. You fail STR and DEX saves. Attacks against you have advantage."],
+    ["unconscious", "Unconscious", { cantAct: 1, speedZero: 1, failStrDex: 1, atkDis: 1 }, "Incapacitated, can't move or speak, unaware, and prone. You drop what you hold and fail STR and DEX saves. Attacks against you have advantage, and hits from within 5 ft are critical hits."]
+  ];
+  const EXHAUSTION = ["", "Disadvantage on ability checks", "Speed halved", "Disadvantage on attack rolls and saving throws", "Hit point maximum halved", "Speed reduced to 0", "Death"];
+  function conditionEffects(s) {
+    const E = { atkAdv: [], atkDis: [], checkDis: [], saveDis: {}, saveFail: {}, speedZero: [], speedHalf: [], hpHalf: [], cantAct: [], lines: [] };
+    ABIL.forEach((a) => { E.saveDis[a] = []; E.saveFail[a] = []; });
+    (s.conds || []).forEach((k) => {
+      const c = CONDITIONS.find((x) => x[0] === k); if (!c) return; const n = c[1], f = c[2];
+      if (f.atkAdv) E.atkAdv.push(n);
+      if (f.atkDis) E.atkDis.push(n);
+      if (f.checkDis) E.checkDis.push(n);
+      if (f.speedZero) E.speedZero.push(n);
+      if (f.cantAct) E.cantAct.push(n);
+      if (f.failStrDex) { E.saveFail.str.push(n); E.saveFail.dex.push(n); }
+      if (f.dexSaveDis) E.saveDis.dex.push(n);
+    });
+    const ex = +s.exhaustion || 0, xn = `Exhaustion ${ex}`;
+    if (ex >= 1) E.checkDis.push(xn);
+    if (ex >= 2) E.speedHalf.push(xn);
+    if (ex >= 3) { E.atkDis.push(xn); ABIL.forEach((a) => E.saveDis[a].push(xn)); }
+    if (ex >= 4) E.hpHalf.push(xn);
+    if (ex >= 5) E.speedZero.push(xn);
+    const list = (a) => [...new Set(a)].join(", ");
+    if (ex >= 6) E.lines.push(["bad", "Exhaustion 6: the character dies."]);
+    if (E.cantAct.length) E.lines.push(["bad", `Can't take actions or reactions (${list(E.cantAct)})`]);
+    if (E.speedZero.length) E.lines.push(["bad", `Speed 0 (${list(E.speedZero)})`]);
+    else if (E.speedHalf.length) E.lines.push(["warn", `Speed halved (${list(E.speedHalf)})`]);
+    if (E.hpHalf.length) E.lines.push(["warn", `Hit point maximum halved (${list(E.hpHalf)})`]);
+    if (E.atkAdv.length && E.atkDis.length) E.lines.push(["", `Attack rolls: advantage (${list(E.atkAdv)}) and disadvantage (${list(E.atkDis)}) cancel out`]);
+    else if (E.atkAdv.length) E.lines.push(["ok", `Advantage on attack rolls (${list(E.atkAdv)})`]);
+    else if (E.atkDis.length) E.lines.push(["warn", `Disadvantage on attack rolls (${list(E.atkDis)})`]);
+    if (E.checkDis.length) E.lines.push(["warn", `Disadvantage on ability checks and initiative (${list(E.checkDis)})`]);
+    if (E.saveFail.str.length) E.lines.push(["bad", `Automatically fail STR and DEX saves (${list(E.saveFail.str)})`]);
+    const sd = [...new Set([].concat(...ABIL.map((a) => E.saveDis[a])))];
+    if (ex >= 3) E.lines.push(["warn", `Disadvantage on all saving throws (${xn})`]);
+    else if (sd.length) E.lines.push(["warn", `Disadvantage on DEX saves (${list(sd)})`]);
+    return E;
+  }
+  /* How a d20 roll should be made right now: { mode: "normal"|"adv"|"dis", why, fail } */
+  function rollState(kind, D) {
+    const E = D.eff; const adv = [], dis = []; let fail = [];
+    if (kind) {
+      if (kind.type === "attack") { adv.push(...E.atkAdv); dis.push(...E.atkDis); }
+      if (kind.type === "check") dis.push(...E.checkDis);
+      if (kind.type === "save") { dis.push(...E.saveDis[kind.ab]); fail = E.saveFail[kind.ab]; }
+    }
+    if (!physical() && UI.rollMode === "adv") adv.push("chosen");
+    if (!physical() && UI.rollMode === "dis") dis.push("chosen");
+    const u = (a) => [...new Set(a)].filter((x) => x !== "chosen").join(", ");
+    if (adv.length && dis.length) return { mode: "normal", why: "advantage and disadvantage cancel", fail };
+    if (adv.length) return { mode: "adv", why: u(adv), fail };
+    if (dis.length) return { mode: "dis", why: u(dis), fail };
+    return { mode: "normal", why: "", fail };
+  }
+  function condStrip(D) {
+    const on = new Set(S.conds);
+    const chips = CONDITIONS.map(([k, n, , t]) => `<button class="cchip ${on.has(k) ? "on" : ""}" data-act="cond" data-k="${k}" aria-pressed="${on.has(k)}" title="${esc(t)}">${n}</button>`).join("");
+    const lines = D.eff.lines.map(([c, t]) => `<li class="${c}">${esc(t)}</li>`).join("");
+    const active = CONDITIONS.filter((c) => on.has(c[0]));
+    return `<section class="panel conds" aria-label="Conditions">
+      <div class="ph"><h2>Conditions</h2>
+        <label class="small">Exhaustion <select id="f-exhaustion" class="f" style="width:auto;padding:1px 4px" data-bind="exhaustion" data-num="1">${[0, 1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${S.exhaustion == n ? "selected" : ""}>${n}${n ? " · " + EXHAUSTION[n] : " · none"}</option>`).join("")}</select></label></div>
+      <div class="cchips">${chips}</div>
+      ${lines ? `<ul class="effects">${lines}</ul>` : `<p class="small muted" style="margin:8px 0 0">No conditions. Click one to apply it; its effects update your speed, HP and rolls automatically.</p>`}
+      ${active.length ? `<details class="small" style="margin-top:6px"><summary>What these conditions do</summary>${active.map((c) => `<p style="margin:4px 0"><b>${c[1]}:</b> ${esc(c[3])}</p>`).join("")}</details>` : ""}
+    </section>`;
+  }
+
+  /* ---------- attacks ---------- */
+  function attackCalc(w, D) {
+    const ab = w.ability || (w.kind === "ranged" ? "dex" : "str");
+    const am = ab === "finesse" ? Math.max(D.mods.str, D.mods.dex) : ab === "spell" ? (D.caster ? D.mods[D.caster.ability] : 0) : D.mods[ab] || 0;
+    const hit = am + (w.prof ? D.pb : 0) + (+w.magic || 0);
+    const dmgMod = ab === "spell" ? 0 : am + (+w.magic || 0);
+    const dmg = /d/.test(w.dice) ? `${w.dice}${dmgMod ? sg(dmgMod).replace("−", "-") : ""}` : String(Math.max(0, (+w.dice || 0) + dmgMod));
+    const vm = /versatile \((\d+d\d+)\)/i.exec(w.props || "");
+    const two = vm ? `${vm[1]}${dmgMod ? sg(dmgMod).replace("−", "-") : ""}` : "";
+    return { hit, dmg, two };
+  }
+  function isProficient(name, cat) {
+    const p = (S.profs.weapons || "").toLowerCase();
+    return p.includes(cat + " weapons") || p.includes(name.toLowerCase());
+  }
+  function attacks(D) {
+    const st = rollState({ type: "attack" }, D);
+    const modeChip = st.mode === "dis" ? `<span class="chip warn">Disadvantage: ${esc(st.why)}</span>` : st.mode === "adv" ? `<span class="chip ok">Advantage: ${esc(st.why)}</span>` : "";
+    const row = (w, i) => {
+      const r = attackCalc(w, D);
+      const reach = w.kind === "ranged" ? (w.range ? w.range + " ft" : "—") : `${/reach/i.test(w.props || "") ? 10 : 5} ft${w.range ? `<br><span class="small muted">thrown ${esc(w.range)}</span>` : ""}`;
+      const main = `<tr class="click" data-act="rollAttack" data-i="${i}" data-hit="${r.hit}" data-dmg="${esc(r.dmg)}">
+        <td><b>${esc(w.name || "Unnamed weapon")}</b>${+w.magic ? ` <span class="badge dom">+${+w.magic}</span>` : ""}${w.prof ? "" : `<div class="small" style="color:var(--warn)">Not proficient</div>`}</td>
+        <td class="num"><b>${sg(r.hit)}</b></td>
+        <td class="num">${esc(r.dmg)} ${esc(w.type)}${r.two ? `<br><span class="small muted">${esc(r.two)} two-handed</span>` : ""}</td>
+        <td class="num">${reach}</td>
+        <td class="small muted">${esc([w.props, w.notes].filter(Boolean).join(" · "))}</td>
+        <td><button class="icon-btn edit" data-act="atkEdit" data-i="${i}" aria-label="Edit ${esc(w.name)}" aria-expanded="${UI.atkEdit === i}">✎</button></td></tr>`;
+      if (UI.atkEdit !== i) return main;
+      const f = (k, label, opts = {}) => `<label class="small">${label}${inp(`attacks.${i}.${k}`, { label, ...opts })}</label>`;
+      return main + `<tr><td colspan="6" style="background:var(--panel-2)"><div class="inline-grid">
+        ${f("name", "Name")}
+        <label class="small">Type<select id="f-atk-${i}-kind" class="f" data-bind="attacks.${i}.kind"><option value="melee" ${w.kind !== "ranged" ? "selected" : ""}>Melee</option><option value="ranged" ${w.kind === "ranged" ? "selected" : ""}>Ranged</option></select></label>
+        <label class="small">Attack ability<select id="f-atk-${i}-ab" class="f" data-bind="attacks.${i}.ability">${[["str", "Strength"], ["dex", "Dexterity"], ["finesse", "Finesse (best of STR/DEX)"], ["spell", "Spellcasting"]].map(([v, n]) => `<option value="${v}" ${w.ability === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        ${f("dice", "Damage dice", { ph: "1d8" })}${f("type", "Damage type")}${f("range", "Range (ft)", { ph: "e.g. 80/320" })}
+        ${f("magic", "Magic bonus", { num: 1 })}${f("props", "Properties")}${f("notes", "Notes")}
+        <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="attacks.${i}.prof" ${w.prof ? "checked" : ""}> Proficient</label>
+      </div><div class="choice" style="margin-top:8px"><button class="btn sm" data-act="atkEdit" data-i="${i}">Done</button><button class="btn sm danger" data-act="delAttack" data-i="${i}">Remove weapon</button></div></td></tr>`;
+    };
+    const table = (kind) => {
+      const rows = S.attacks.map((w, i) => ((w.kind || "melee") === kind ? row(w, i) : "")).join("");
+      return rows ? `<div class="tw"><table class="t"><thead><tr><th>Weapon</th><th>To hit</th><th>Damage</th><th>${kind === "melee" ? "Reach" : "Range"}</th><th>Properties</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<p class="small muted" style="margin:0">No ${kind} weapons yet. Add one from the list.</p>`;
+    };
+    const c = D.caster;
+    const spellRows = c ? (S.cantrips || []).map((n) => SPELL_INDEX[n]).filter((sp) => sp && sp.x.cantrip).map((sp) => {
+      const dice = cantripDice(sp, D);
+      return `<tr class="click" data-act="castCantrip" data-name="${esc(sp.name)}"><td><b>${esc(sp.name)}</b><div class="small muted">Cantrip</div></td><td class="num">${sp.x.cantrip.save ? sp.x.cantrip.save.toUpperCase() + " DC " + c.dc : sg(c.atk)}</td><td class="num">${dice} ${sp.x.cantrip.type}</td><td class="num">${esc(sp.range)}</td></tr>`;
+    }).concat(spellsAvailable(c).map((r) => SPELL_INDEX[r[0]]).filter((sp) => sp.level >= 1 && sp.x.dmg && sp.level <= D.maxSpellLevel && (S.prepared.includes(sp.name) || c.domain.includes(sp.name))).map((sp) => {
+      return `<tr class="click" data-act="cast" data-name="${esc(sp.name)}"><td><b>${esc(sp.name)}</b><div class="small muted">${ORD[sp.level]} level · uses a slot</div></td><td class="num">${sp.x.dmg.attack ? sg(c.atk) : (sp.x.dmg.save || "").toUpperCase() + " DC " + c.dc}</td><td class="num">${esc(effectLine(sp, sp.level, D).split(", ").pop())}</td><td class="num">${esc(sp.range)}</td></tr>`;
+    })).join("") : "";
+    const groups = [["simple", "melee", "Simple melee"], ["simple", "ranged", "Simple ranged"], ["martial", "melee", "Martial melee"], ["martial", "ranged", "Martial ranged"]];
+    const opts = groups.map(([cat, kind, label]) => `<optgroup label="${label}">${(window.WEAPONS || []).filter((w) => w[1] === cat && w[2] === kind).map((w) => `<option value="${esc(w[0])}">${esc(w[0])} · ${w[3]} ${w[4]}${isProficient(w[0], w[1]) ? "" : " (not proficient)"}</option>`).join("")}</optgroup>`).join("");
+    const ds = D.classes.find((cl) => cl.feats.some((f) => f.name === "Divine Strike"));
+    return `<div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+      <div class="stack">
+        ${D.eff.cantAct.length ? `<section class="panel" style="border-color:var(--bad)"><b style="color:var(--bad)">You can't take actions or reactions</b> <span class="small muted">(${esc(D.eff.cantAct.join(", "))})</span></section>` : ""}
+        <section class="panel"><div class="ph"><h2>Melee weapons</h2>${modeChip}</div>${table("melee")}</section>
+        <section class="panel"><div class="ph"><h2>Ranged weapons</h2>${modeChip}</div>${table("ranged")}
+          <p class="small muted" style="margin:8px 0 0">Attacking beyond normal range (up to long range) has disadvantage. Ranged attacks with an enemy within 5 ft also have disadvantage.</p></section>
+        ${spellRows ? `<section class="panel"><div class="ph"><h2>Spell attacks</h2><span class="small muted">Save DC ${c.dc} · attack ${sg(c.atk)}</span></div>
+          <div class="tw"><table class="t"><thead><tr><th>Spell</th><th>Hit / DC</th><th>Damage</th><th>Range</th></tr></thead><tbody>${spellRows}</tbody></table></div></section>` : ""}
+      </div>
+      <div class="stack">
+        <section class="panel"><h2>Add a weapon</h2>
+          <select id="add-weapon" class="f" aria-label="Weapon to add"><option value="">Choose from the Player's Handbook…</option>${opts}</select>
+          <div class="choice" style="margin-top:8px"><button class="btn sm primary" data-act="addWeapon">Add weapon</button><button class="btn sm" data-act="addAttack">Custom weapon</button></div>
+          <p class="small muted" style="margin:8px 0 0">To-hit and damage are worked out from your scores and proficiencies. Use ✎ to set a magic bonus or change details.</p></section>
+        ${ds ? `<section class="panel"><h2>Divine Strike</h2><p style="margin:0">Once on each of your turns, when you hit with a weapon attack, deal an extra <b>${ds.level >= 14 ? "2d8" : "1d8"} radiant</b> damage.</p></section>` : ""}
+        <section class="panel"><h2>On your turn</h2>
+          <dl class="kv small">
+            <dt>Move</dt><dd>Up to your speed (${D.speed} ft), split before and after your action.</dd>
+            <dt>Action</dt><dd>Attack, Cast a Spell, Dash, Disengage, Dodge, Help, Hide, Ready, Search, or Use an Object.</dd>
+            <dt>Bonus</dt><dd>Only when a feature or spell gives you one, like Healing Word or Spiritual Weapon.</dd>
+            <dt>Reaction</dt><dd>One per round, such as an opportunity attack when an enemy leaves your reach.</dd>
+            <dt>Free</dt><dd>Interact with one object, like drawing a weapon or opening a door.</dd>
+          </dl></section>
+      </div></div>`;
   }
 
   /* ---- Spells ---- */
@@ -517,7 +681,7 @@
       <div class="sp-head">${box}
         <div style="min-width:0"><span class="sp-name" data-act="openSpell" data-name="${esc(sp.name)}">${esc(sp.name)}</span>${dom ? `<span class="badge dom">Domain</span>` : ""}${sp.conc ? `<span class="badge">Conc.</span>` : ""}${sp.ritual ? `<span class="badge">Ritual</span>` : ""}
           <div class="sp-meta">${esc(sp.time)} · ${esc(sp.range)} · ${esc(sp.dur)}${effect ? " · " + effect : ""}</div></div>
-        ${sp.level === 0 ? (sp.x.cantrip ? `<button class="btn sm" data-act="castCantrip" data-name="${esc(sp.name)}">Roll</button>` : "") : prep ? `<button class="btn sm" data-act="cast" data-name="${esc(sp.name)}">Cast</button>` : ""}
+        ${sp.level === 0 ? (sp.x.cantrip ? `<button class="btn sm" data-act="castCantrip" data-name="${esc(sp.name)}">${physical() ? "Use" : "Roll"}</button>` : "") : prep ? `<button class="btn sm" data-act="cast" data-name="${esc(sp.name)}">Cast</button>` : ""}
       </div>
       ${open ? `<div class="sp-body"><div class="small muted">${ORD[sp.level]}${sp.level ? " level" : ""} ${esc(sp.school.toLowerCase())} · ${esc(sp.comp)}</div><p style="margin:4px 0 0">${esc(sp.text)}</p></div>` : ""}
     </div>`;
@@ -607,10 +771,16 @@
             <div class="hp-bar"><i style="width:${Math.max(0, cur / g.hpMax * 100)}%;background:var(--arc)"></i></div>
           </div>
           <div class="res"><div><b>${esc(K.breath ? K.breath.name || "Breath Weapon" : "Breath Weapon")}</b> <span class="small muted">recharge ${esc(K.breath && K.breath.recharge || "5–6")}</span></div>
-            <div class="choice">${dS.breathReady ? `<span class="chip ok">Ready</span><button class="btn sm arc" data-act="breath">Breathe</button>` : `<span class="chip warn">Spent</span><button class="btn sm" data-act="recharge">Roll recharge</button><button class="btn sm" data-act="breathReset">Mark ready</button>`}</div></div>
+            <div class="choice">${dS.breathReady ? `<span class="chip ok">Ready</span><button class="btn sm arc" data-act="breath">Breathe</button>`
+              : `<span class="chip warn">Spent</span>
+                <label class="small" for="rch-roll">Recharge d6</label><input id="rch-roll" class="f n" type="number" min="1" max="6" inputmode="numeric" placeholder="1–6" aria-label="Your recharge roll on a d6">
+                <button class="btn sm" data-act="rechargeCheck">Check</button>
+                ${physical() ? "" : `<button class="btn sm" data-act="recharge">Roll for me</button>`}
+                <button class="btn sm" data-act="breathReset">Mark ready</button>`}</div></div>
+          ${dS.breathReady ? "" : `<p class="small muted" style="margin:0 0 6px">At the start of the dragon's turn, roll a d6 and enter it. On a 5 or 6 the breath is ready again.</p>`}
           ${g.feats.filter((f) => f.kind === "Reaction").map((f) => `<div class="res"><div><b>${esc(f.name)}</b> <span class="small muted">reaction</span></div>
             <div class="choice">${dS.guardUsed ? `<span class="chip warn">Used this round</span><button class="btn sm" data-act="guardReset">Reset</button>` : `<button class="btn sm arc" data-act="guard">Use (1d6${sg(g.m.con)})</button>`}</div></div>`).join("")}
-          <div class="res"><div><b>Bite</b> <span class="small muted">${sg(g.biteHit)} to hit</span></div><button class="btn sm" data-act="bite">Roll attack</button></div>
+          <div class="res"><div><b>Bite</b> <span class="small muted">${sg(g.biteHit)} to hit</span></div><button class="btn sm" data-act="bite">${physical() ? "Attack" : "Roll attack"}</button></div>
         </section>
         <section class="panel"><h2>Bond & name</h2>
           <label class="small">Dragon's name ${inp("dragon.name", { label: "Dragon name", ph: (K.nameIdeas || []).join(", ") })}</label>
@@ -849,9 +1019,9 @@
     return `<div class="opt-grid">
         <button class="opt ${L.hpMode === "avg" ? "sel" : ""}" data-act="luHp" data-k="avg" aria-pressed="${L.hpMode === "avg"}">
           <b>Fixed value</b><span class="big">${avg}</span><span class="small muted">Half your d${hd} plus one. The safe choice, and what most tables use.</span></button>
-        <button class="opt ${L.hpMode === "roll" ? "sel" : ""}" data-act="luHp" data-k="roll" aria-pressed="${L.hpMode === "roll"}">
-          <b>Roll it</b><span class="big">${L.hpMode === "roll" ? L.hpVal : "d" + hd}</span><span class="small muted">${L.hpMode === "roll" ? "Rolled once. The result stands." : `Roll a d${hd}. Could be 1, could be ${hd}.`}</span></button>
-        <div class="opt ${L.hpMode === "manual" ? "sel" : ""}"><b>Rolled real dice?</b>
+        ${physical() ? "" : `<button class="opt ${L.hpMode === "roll" ? "sel" : ""}" data-act="luHp" data-k="roll" aria-pressed="${L.hpMode === "roll"}">
+          <b>Roll it</b><span class="big">${L.hpMode === "roll" ? L.hpVal : "d" + hd}</span><span class="small muted">${L.hpMode === "roll" ? "Rolled once. The result stands." : `Roll a d${hd}. Could be 1, could be ${hd}.`}</span></button>`}
+        <div class="opt ${L.hpMode === "manual" ? "sel" : ""}"><b>${physical() ? "Roll your hit die" : "Rolled real dice?"}</b>
           <input id="lu-hpman" class="f n" type="number" min="1" max="${hd}" data-lu="hpManual" value="${L.hpMode === "manual" ? L.hpVal : ""}" placeholder="1–${hd}" aria-label="Your hit die roll" style="width:5em;font-size:1.4rem">
           <span class="small muted">Type the number you rolled at the table.</span></div>
       </div>
@@ -1034,7 +1204,11 @@
       <header><h2 id="sr-title">Short rest</h2><button class="icon-btn" data-act="closeModal" aria-label="Close">✕</button></header>
       <div class="mb">
         <p style="margin:0">Spend hit dice to heal. Each die heals d${hd} ${sg(D.mods.con)} (CON). You have <b>${left}</b> of ${D.total} left. HP: <b>${S.hp.current} / ${D.hpMax}</b>.</p>
-        <div class="choice"><button class="btn" data-act="spendHD" ${left <= 0 || S.hp.current >= D.hpMax ? "disabled" : ""}>Roll a hit die</button></div>
+        <div class="choice">
+          <label class="small" for="hd-roll">Your d${hd} roll</label><input id="hd-roll" class="f n" type="number" min="1" max="${hd}" inputmode="numeric" placeholder="1–${hd}">
+          <button class="btn" data-act="spendHD" data-k="manual" ${left <= 0 || S.hp.current >= D.hpMax ? "disabled" : ""}>Spend hit die</button>
+          ${physical() ? "" : `<button class="btn" data-act="spendHD" data-k="roll" ${left <= 0 || S.hp.current >= D.hpMax ? "disabled" : ""}>Roll for me</button>`}
+        </div>
         ${(MODAL.log || []).length ? `<ul class="small" style="margin:0;padding-left:18px">${MODAL.log.map((l) => `<li>${l}</li>`).join("")}</ul>` : ""}
         <p class="small muted" style="margin:0">Finishing the rest restores: ${D.resources.filter((r) => r.reset === "short").map((r) => r.name).join(", ") || "nothing else"}.</p>
       </div>
@@ -1069,7 +1243,7 @@
         ${sp.conc && S.concentration ? `<p class="small" style="margin:0;color:var(--bad)">Casting this ends your concentration on ${esc(S.concentration)}.</p>` : ""}
       </div>
       <footer>${sp.ritual ? `<button class="btn" data-act="castRitual">Cast as ritual</button>` : ""}<button class="btn" data-act="closeModal">Cancel</button>
-        <button class="btn primary" data-act="castGo" data-l="${sel}" ${opts.some((o) => o.l === sel && o.left > 0) ? "" : "disabled"}>Cast${eff && (sp.x.heal || sp.x.dmg) ? " & roll" : ""}</button></footer></div>`;
+        <button class="btn primary" data-act="castGo" data-l="${sel}" ${opts.some((o) => o.l === sel && o.left > 0) ? "" : "disabled"}>Cast${!physical() && eff && (sp.x.heal || sp.x.dmg) ? " & roll" : ""}</button></footer></div>`;
   }
   function settingsModal() {
     const last = (S.history || [])[S.history.length - 1];
@@ -1152,18 +1326,26 @@
       if (left < n) { toast("Not enough Essence", `${left} left; that costs ${n}.`); return; }
       S.dragon.essenceUsed += n; commit();
     },
-    rollAbil: (e) => { const a = e.dataset.k; d20(ABIL_NAME[a] + " check", derive().mods[a]); },
-    rollSave: (e) => { const a = e.dataset.k; d20(ABIL_NAME[a] + " save", derive().save(a)); },
-    rollSkill: (e) => { const sk = SKILLS.find((x) => x[0] === e.dataset.k); d20(sk[1], derive().skill(sk[0], sk[2])); },
-    rollInit: () => d20("Initiative", derive().init),
+    rollAbil: (e) => { const a = e.dataset.k; d20(ABIL_NAME[a] + " check", derive().mods[a], "", "", { type: "check" }); },
+    rollSave: (e) => { const a = e.dataset.k; d20(ABIL_NAME[a] + " save", derive().save(a), "", "", { type: "save", ab: a }); },
+    rollSkill: (e) => { const sk = SKILLS.find((x) => x[0] === e.dataset.k); d20(sk[1], derive().skill(sk[0], sk[2]), "", "", { type: "check" }); },
+    rollInit: () => d20("Initiative", derive().init, "", "", { type: "check" }),
     rollAttack: (e) => {
-      const w = S.attacks[+e.dataset.i]; const dm = roll(e.dataset.dmg.replace("−", "-"));
-      d20(w.name + " attack", +e.dataset.hit, `damage ${dm.total} ${w.type} ${dm.detail}`);
+      const w = S.attacks[+e.dataset.i];
+      if (physical()) { d20(w.name + " attack", +e.dataset.hit, "", `Damage on a hit: ${esc(e.dataset.dmg)} ${esc(w.type)}`, { type: "attack" }); return; }
+      const dm = roll(e.dataset.dmg.replace("−", "-"));
+      d20(w.name + " attack", +e.dataset.hit, `damage ${dm.total} ${w.type} ${dm.detail}`, "", { type: "attack" });
     },
     castCantrip: (e) => {
-      const D = derive(); const sp = SPELL_INDEX[e.dataset.name]; const dice = cantripDice(sp, D); const r = roll(dice);
+      const D = derive(); const sp = SPELL_INDEX[e.dataset.name]; const dice = cantripDice(sp, D);
+      if (physical()) {
+        if (sp.x.cantrip.save) toast(`${esc(sp.name)}: ${sp.x.cantrip.save.toUpperCase()} save DC <b>${D.caster.dc}</b>`, `On a failed save, roll ${dice} ${sp.x.cantrip.type}`);
+        else d20(sp.name, D.caster.atk, "", `Damage on a hit: ${dice} ${sp.x.cantrip.type}`, { type: "attack" });
+        return;
+      }
+      const r = roll(dice);
       if (sp.x.cantrip.save) toast(`${esc(sp.name)}: <b class="num">${r.total}</b> ${sp.x.cantrip.type}`, `${sp.x.cantrip.save.toUpperCase()} save DC ${D.caster.dc} · ${dice} ${r.detail}`);
-      else d20(sp.name, D.caster.atk, `damage ${r.total} ${sp.x.cantrip.type}`);
+      else d20(sp.name, D.caster.atk, `damage ${r.total} ${sp.x.cantrip.type}`, "", { type: "attack" });
     },
     toggleCantrip: (e) => {
       const n = e.dataset.name; const D = derive();
@@ -1187,6 +1369,13 @@
       if (sp.conc) S.concentration = sp.name;
       let msg = "", sub = `${ORD[l]}-level slot used`;
       const x = sp.x; const up = l - sp.level;
+      if (physical()) {
+        const eff = effectLine(sp, l, D);
+        const heal = x.heal && c.feats.some((f) => f.name === "Blessed Healer") ? ` · Blessed Healer: you regain ${2 + l} HP if you healed someone else` : "";
+        const st = x.dmg && x.dmg.attack ? rollState({ type: "attack" }, D) : null;
+        const adv = st && st.mode !== "normal" ? ` · Attack roll with ${st.mode === "adv" ? "advantage" : "disadvantage"} (${esc(st.why)})` : "";
+        MODAL = null; commit(); toast(`${esc(sp.name)} cast at ${ORD[l]} level`, `${sub}${eff ? " · Roll: " + eff : ""}${adv}${heal}`, 6000); return;
+      }
       if (x.heal) {
         const supreme = c.feats.some((f) => f.name === "Supreme Healing");
         let total, detail = "";
@@ -1202,26 +1391,62 @@
         let dice = x.dmg.dice; if (x.dmg.up) dice = addDice(dice, x.dmg.up, up); if (x.dmg.up2) dice = addDice(dice, x.dmg.up2, Math.floor(up / 2));
         if (x.dmg.mod) dice += "+" + D.mods[c.ability];
         const r = roll(dice);
-        if (x.dmg.attack) { MODAL = null; commit(); d20(sp.name, c.atk, `damage ${r.total} ${x.dmg.type} ${r.detail} · ${ORD[l]} slot used`); return; }
+        if (x.dmg.attack) { MODAL = null; commit(); d20(sp.name, c.atk, `damage ${r.total} ${x.dmg.type} ${r.detail} · ${ORD[l]} slot used`, "", { type: "attack" }); return; }
         msg = `${esc(sp.name)}: <b class="num">${r.total}</b> ${x.dmg.type}`; sub += ` · ${x.dmg.save.toUpperCase()} save DC ${c.dc} · ${r.detail}`;
       } else msg = `${esc(sp.name)} cast`;
       MODAL = null; commit(); toast(msg, sub, 6000);
     },
     breath: () => {
-      const D = derive(); const g = D.dragon; const r = roll(g.tier.breath);
+      const D = derive(); const g = D.dragon;
       if (g.essence) { const left = g.essenceMax - S.dragon.essenceUsed; if (left < 2) { toast("Not enough Essence", "Breath costs 2 points."); return; } S.dragon.essenceUsed += 2; }
       S.dragon.breathReady = false; commit();
-      toast(`${esc(g.K.breath.name || "Breath")}: <b class="num">${r.total}</b> ${g.K.damageType}`, `DC ${g.dc} ${(g.K.breath.save || "dex").toUpperCase()} save · ${g.tier.breath} ${r.detail}${g.essence ? " · 2 Essence spent" : ""}`, 6000);
+      const save = `DC ${g.dc} ${(g.K.breath.save || "dex").toUpperCase()} save`; const ess = g.essence ? " · 2 Essence spent" : "";
+      if (physical()) { toast(`${esc(g.K.breath.name || "Breath")}: ${save}`, `Roll ${g.tier.breath} ${g.K.damageType} damage${ess}`, 6000); return; }
+      const r = roll(g.tier.breath);
+      toast(`${esc(g.K.breath.name || "Breath")}: <b class="num">${r.total}</b> ${g.K.damageType}`, `${save} · ${g.tier.breath} ${r.detail}${ess}`, 6000);
     },
     recharge: () => { const n = rnd(6); if (n >= 5) { S.dragon.breathReady = true; commit(); } toast(`Recharge roll: <b>${n}</b>`, n >= 5 ? "Breath weapon is ready." : "Not yet. Try again next turn."); },
+    rechargeCheck: () => {
+      const n = Math.round(+$("#rch-roll").value);
+      if (!(n >= 1 && n <= 6)) { toast("Enter your d6 roll", "Type a number from 1 to 6, then press Check."); return; }
+      if (n >= 5) { S.dragon.breathReady = true; commit(); toast(`Rolled ${n}: breath recharged`, "The breath weapon is ready."); }
+      else { $("#rch-roll").value = ""; toast(`Rolled ${n}: not yet`, "It recharges on a 5 or 6. Try again next turn."); }
+    },
     breathReset: () => { S.dragon.breathReady = true; commit(); },
-    guard: () => { const g = derive().dragon; const r = roll("1d6"); S.dragon.guardUsed = true; commit(); toast(`Lightning Guard: reduce damage by <b class="num">${Math.max(0, r.total + g.m.con)}</b>`, `1d6 ${r.detail} ${sg(g.m.con)}`); },
+    guard: () => {
+      const g = derive().dragon; S.dragon.guardUsed = true; commit();
+      if (physical()) { toast(`Lightning Guard: reduce damage by 1d6 ${sg(g.m.con)}`, "Roll the d6, add the modifier, and subtract it from the hit."); return; }
+      const r = roll("1d6"); toast(`Lightning Guard: reduce damage by <b class="num">${Math.max(0, r.total + g.m.con)}</b>`, `1d6 ${r.detail} ${sg(g.m.con)}`);
+    },
     guardReset: () => { S.dragon.guardUsed = false; commit(); },
-    bite: () => { const g = derive().dragon; const K = g.K; const r = roll((K.bite ? K.bite.dice : "1d6") + "+" + g.m.str); d20("Bite", g.biteHit, `damage ${r.total} ${K.bite ? K.bite.type : "piercing"}`); },
+    bite: () => {
+      const g = derive().dragon; const K = g.K; const dice = (K.bite ? K.bite.dice : "1d6") + sg(g.m.str).replace("−", "-"); const type = K.bite ? K.bite.type : "piercing";
+      if (physical()) { d20("Bite", g.biteHit, "", `Damage on a hit: ${dice} ${type}`); return; }
+      const r = roll(dice); d20("Bite", g.biteHit, `damage ${r.total} ${type}`);
+    },
+    diceMode: (e) => { S.diceMode = e.dataset.k; commit(); toast(S.diceMode === "physical" ? "Rolling your own dice" : "The sheet rolls for you", S.diceMode === "physical" ? "Buttons show what to roll and track what you spend." : "Buttons roll dice and show results."); },
     saveProf: (e) => { const a = e.dataset.k; S.saveProf = S.saveProf.includes(a) ? S.saveProf.filter((x) => x !== a) : S.saveProf.concat(a); commit(); },
     skillProf: (e, ev) => { ev.stopPropagation(); const k = e.dataset.k; S.skills[k] = ((S.skills[k] || 0) + 1) % 3; commit(); },
-    addAttack: () => { S.attacks.push({ name: "New attack", ability: "str", dice: "1d6", type: "bludgeoning", prof: true, notes: "" }); commit(); },
-    delAttack: (e) => { S.attacks.splice(+e.dataset.i, 1); commit(); },
+    addAttack: () => {
+      S.attacks.push({ name: "New weapon", kind: "melee", ability: "str", dice: "1d6", type: "bludgeoning", prof: true, magic: 0, range: "", props: "", notes: "" });
+      UI.tab = "attacks"; UI.atkEdit = S.attacks.length - 1; commit();
+      const el = document.getElementById(`f-attacks-${UI.atkEdit}-name`); if (el) { el.focus(); el.select(); }
+    },
+    addWeapon: () => {
+      const name = $("#add-weapon").value; const w = (window.WEAPONS || []).find((x) => x[0] === name);
+      if (!w) { toast("Pick a weapon first", "Choose one from the list, then press Add weapon."); return; }
+      const [n, cat, kind, dice, type, props, range] = w;
+      S.attacks.push({ name: n, kind, ability: /finesse/i.test(props) ? "finesse" : kind === "ranged" ? "dex" : "str", dice, type, prof: isProficient(n, cat), magic: 0, range, props, notes: "" });
+      commit(); toast(`${esc(n)} added`, isProficient(n, cat) ? "You're proficient with it." : "You're not proficient, so your proficiency bonus isn't added to hit.");
+    },
+    atkEdit: (e, ev) => { if (ev) ev.stopPropagation(); const i = +e.dataset.i; UI.atkEdit = UI.atkEdit === i ? null : i; render(); },
+    delAttack: (e) => { S.attacks.splice(+e.dataset.i, 1); UI.atkEdit = null; commit(); },
+    cond: (e) => {
+      const k = e.dataset.k; const on = S.conds.includes(k);
+      S.conds = on ? S.conds.filter((x) => x !== k) : S.conds.concat(k);
+      if (!on && k === "unconscious" && !S.conds.includes("prone")) S.conds.push("prone"); // unconscious creatures fall prone
+      commit();
+    },
     addItem: () => { S.inventory.push({ name: "", qty: 1, wt: 0, notes: "" }); commit(); const i = S.inventory.length - 1; const el = document.getElementById(`f-inv-${i}-name`); if (el) el.focus(); },
     delItem: (e) => { S.inventory.splice(+e.dataset.i, 1); commit(); },
     addCustom: () => { S.customFeatures.push({ name: "", text: "" }); commit(); },
@@ -1243,10 +1468,15 @@
     luPrep: (e) => { const n = e.dataset.name; MODAL.prepared = MODAL.prepared.includes(n) ? MODAL.prepared.filter((x) => x !== n) : MODAL.prepared.concat(n); renderModal(); },
     luApply: () => applyLevelUp(),
     // rests
-    spendHD: () => {
-      const D = derive(); const hd = CLASSES[S.classes[0].id].hitDie; const r = rnd(hd); const gain = Math.max(0, r + D.mods.con);
+    spendHD: (e) => {
+      const D = derive(); const hd = CLASSES[S.classes[0].id].hitDie; let r;
+      if (e.dataset.k === "manual") {
+        r = Math.round(+$("#hd-roll").value);
+        if (!(r >= 1 && r <= hd)) { toast("Enter your hit die roll", `Type a number from 1 to ${hd}.`); return; }
+      } else r = rnd(hd);
+      const gain = Math.max(0, r + D.mods.con);
       S.hitDiceUsed++; S.hp.current = Math.min(D.hpMax, S.hp.current + gain);
-      MODAL.log.push(`d${hd} rolled ${r} ${sg(D.mods.con)} = <b>${gain}</b> HP`); commit();
+      MODAL.log.push(`d${hd}: ${r} ${sg(D.mods.con)} CON = <b>${gain}</b> HP`); commit();
     },
     finishShort: () => {
       derive().resources.filter((r) => r.reset === "short").forEach((r) => (S.resUsed[r.id] = 0));
@@ -1288,6 +1518,8 @@
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && MODAL) { MODAL = null; renderModal(); }
     if (ev.key === "Enter" && (ev.target.id === "hp-amt" || ev.target.id === "dhp-amt")) { ev.preventDefault(); }
+    if (ev.key === "Enter" && ev.target.id === "rch-roll") { ev.preventDefault(); A.rechargeCheck(); }
+    if (ev.key === "Enter" && ev.target.id === "hd-roll") { ev.preventDefault(); const b = $('[data-act="spendHD"][data-k="manual"]'); if (b && !b.disabled) A.spendHD(b); }
   });
   function luField(el) {
     const k = el.dataset.lu, v = el.value;
