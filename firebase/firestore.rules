@@ -25,10 +25,11 @@ service cloud.firestore {
     match /reports/{id} { allow read: if dm(); allow write: if member(); }
 
     // party/main is the DM's party sheet. Sheets read the round, damage, conditions and rests the DM sends,
-    // and answer through party/turn-<rider>.
+    // and answer through party/turn-<rider>. party/wards holds Breya's Hidecarved Wards: her sheet and the
+    // DM place them, and every rider's sheet reads them.
     match /party/{doc} {
-      allow read: if dm() || (member() && doc in ['round', 'hp', 'conds', 'rest']);
-      allow write: if dm() || (member() && doc.matches('turn-.*'));
+      allow read: if dm() || (member() && doc in ['round', 'hp', 'conds', 'rest', 'wards']);
+      allow write: if dm() || (member() && (doc.matches('turn-.*') || doc == 'wards'));
     }
   }
 }

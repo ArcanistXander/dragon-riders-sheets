@@ -679,7 +679,30 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function warden(){return state.party.find(function(p){return /dragonwarden/i.test(p.classes||'')})}
   function artLvl(w){var m=/artificer\s*(\d+)/i.exec(w.classes||'');return m?+m[1]:(lvl(w)||0)}
   function wardCap(l){return l>=15?4:l>=9?3:l>=5?2:l>=3?1:0}
-  function wardsOn(p){var o=play.wards[p.id]||{};return WARDS.filter(function(w){return o[w[0]]}).map(function(w){return w[0]})}
+  // Online, the wards live in party/wards, shared with the warden's own sheet and every rider's sheet;
+  // offline (or before anyone placed one) they're kept in play.wards on this device.
+  var sharedWards=null;
+  function wardsOn(p){
+    if(sharedWards){var l=(sharedWards.wards||{})[p.id]||[];return WARDS.filter(function(w){return l.indexOf(w[0])>=0}).map(function(w){return w[0]})}
+    var o=play.wards[p.id]||{};return WARDS.filter(function(w){return o[w[0]]}).map(function(w){return w[0]});
+  }
+  function toggleWard(rid,key){
+    var map={};state.party.forEach(function(p){var l=wardsOn(p);if(l.length)map[p.id]=l.slice()});
+    var l=map[rid]||[],i=l.indexOf(key);if(i>=0)l.splice(i,1);else l.push(key);
+    if(l.length)map[rid]=l;else delete map[rid];
+    var wo=play.wards[rid]={};(map[rid]||[]).forEach(function(k){wo[k]=true});
+    savePlay();
+    if(!cloudDb)return;
+    var w=warden();if(!w)return;
+    var lv=artLvl(w),res=lv>=15?'1d8':lv>=9?'1d6':'1d4';
+    var doc={at:new Date().toISOString(),by:'dm',warden:w.id,wardenName:w.name,dragonName:dName(w),lvl:lv,wards:map,info:{},ac:{}};
+    sharedWards=doc;
+    Object.keys(map).forEach(function(id){
+      doc.info[id]=map[id].map(function(k){var x=WARDS.find(function(y){return y[0]===k});return {key:k,name:(k==='bonded'?'Ward of the ':'Ward of ')+x[1],text:x[2].replace('{res}',res).replace('{lvl}',lv)}});
+      var p=byId(id);doc.ac[id]=p?wardAC(p):0;
+    });
+    cloudDb.doc('party/wards').set(doc).catch(function(){statusMsg='Couldn’t share that ward. Check the connection.';softRender()});
+  }
   function placedCount(){return state.party.reduce(function(a,p){return a+wardsOn(p).length},0)}
   function wardAC(p){
     var w=warden();if(!w)return 0;var on=wardsOn(p),a=0;
@@ -808,7 +831,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(d.aspects)bond+='<div><span class="lbl">Aspects and bleedover</span><div class="ftext">'+esc(d.aspects)+'</div></div>';
     var w=warden();
     if(w){
-      var lv=artLvl(w), cap=wardCap(lv), placed=placedCount(), on=play.wards[p.id]||{}, mine=w.id===p.id;
+      var lv=artLvl(w), cap=wardCap(lv), placed=placedCount(), on={}, mine=w.id===p.id;
+      wardsOn(p).forEach(function(k){on[k]=true});
       var res=lv>=15?'1d8':lv>=9?'1d6':'1d4';
       bond+='<div><span class="fname">Hidecarved wards</span> <span class="minor">'+esc(w.name)+' has '+placed+' of '+cap+' placed</span><div class="conds" style="max-width:none">'+
         WARDS.filter(function(x){return x[0]!=='bonded'||mine}).map(function(x){
@@ -1305,7 +1329,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     else if(ds.spend){play.spent[ds.spend]=true;delete rolls[ds.spend];savePlay();render();}
     else if(ds.roll){var r=1+Math.floor(Math.random()*6),ok=r>=+ds.min;if(ok)delete play.spent[ds.roll];rolls[ds.roll]='Rolled '+r+(ok?': recharged':': not yet');savePlay();render();}
     else if(ds.ward){
-      var wo=play.wards[ds.ward]||(play.wards[ds.ward]={});wo[ds.w]=!wo[ds.w];savePlay();render();
+      toggleWard(ds.ward,ds.w);render();
     }
     else if(ds.aegis){
       var aid=ds.aegis+'-dragon',lv=+ds.lv,ac=crit(aid);
@@ -1522,6 +1546,12 @@ span.chip{border:1px solid var(--rule);display:inline-block}
         // what was already sent to live sheets (kept whole, since each write replaces the document)
         db.doc('party/hp').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)hpCmds=(s.exists&&s.data())||{}},function(){});
         db.doc('party/conds').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)dmConds=(s.exists&&s.data())||{}},function(){});
+        // Hidecarved Wards, shared with Breya's sheet and every rider's sheet
+        db.doc('party/wards').onSnapshot(function(s){
+          if(s.metadata&&s.metadata.hasPendingWrites)return;
+          var d=s.exists?s.data():null;if(d&&sharedWards&&sharedWards.at>d.at)return;
+          sharedWards=d&&d.wards?d:null;softRender();
+        },function(){});
         // riders' own sheets post their numbers here, live
         if(db.collection)db.collection('reports').onSnapshot(function(qs){
           var changed=false;qs.docs.forEach(function(d){if(d.exists&&acceptReport(d.data()))changed=true});

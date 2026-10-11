@@ -37,6 +37,18 @@ window.DRAGON_RULES = {
   bonusActionCommand: "The dragon takes the Dodge action on its turn unless you use a bonus action to command it to take another action."
 };
 
+/* Every rider's dragon, by the rider's id on the DM's party sheet. Used where one sheet
+   reaches another rider's dragon, like Breya's Hidecarved Wards. Keep in step with party.html. */
+window.PARTY_DRAGONS = [
+  { id: "breya", rider: "Breya", dragon: "Ametrin" },
+  { id: "corbin", rider: "Corbin", dragon: "Bronze Hatchling" },
+  { id: "coltyn", rider: "Coltyn", dragon: "Noctoror Sactr" },
+  { id: "haratio", rider: "Haratio", dragon: "Crystal Hatchling" },
+  { id: "valkyrie", rider: "Valkyrie", dragon: "Navarre" },
+  { id: "cedrick", rider: "Cedrick", dragon: "Emerald Hatchling" },
+  { id: "ra", rider: "Ra", dragon: "Thamior" }
+];
+
 /* Dragon kinds. Only `bronze` has a full stat card so far; the others
    carry the breath and persona notes from the companion document. */
 window.DRAGON_KINDS = {

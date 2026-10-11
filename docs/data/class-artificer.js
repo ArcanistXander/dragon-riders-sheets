@@ -119,24 +119,29 @@ window.CLASSES.artificer = {
         ],
         17: [{ name: "Dragonwarden Spells", text: "Wall of Force is always prepared." }]
       },
-      /* Bonus a ward gives the warden's own dragon, for its stat block.
-         A ward's target may list several dragons ("Ametrin, Navarre"). */
+      /* Bonus a ward gives the warden's own dragon, for its stat block. */
       dragonBonus: (s, lvl) => {
         const on = ((s.panels || {}).wards || {}).active || {};
-        const mine = (k) => on[k] != null && (k === "bonded" || targets(on[k]).some((t) => sameDragon(t, s.dragon.name)));
-        let ac = 0; const why = [];
-        if (mine("bonded")) { ac += 2; why.push("Bonded ward +2"); }
-        else if (mine("deflection")) { ac += 1; why.push("Deflection ward +1"); }
-        if (lvl >= 15 && Object.keys(on).some(mine)) { ac += 1; why.push("warded +1"); }
-        return { ac, why };
+        const keys = Object.keys(on).filter((k) => (on[k] || []).includes(window.CHARACTER_ID));
+        const ac = wardAC(keys, lvl);
+        return { ac, why: ac ? [`${keys.includes("bonded") ? "Bonded" : "Deflection"} ward${lvl >= 15 ? " + Master Wardcarver" : ""} +${ac}`] : [] };
       },
       panels: [
         {
           id: "wards", title: "Hidecarved Wards",
-          intro: (c) => `At the end of a long rest, carve up to ${window.WARD_CAP(c.lvl)} ward${window.WARD_CAP(c.lvl) > 1 ? "s" : ""} into willing dragons within reach. Put the same ward on several dragons (list them with commas), or stack different wards on one dragon. A ward works only while its dragon is within 60 ft. of ${c.dragon || "your bonded dragon"}, and ends when you carve a replacement or the dragon drops to 0 HP. During a short rest, 10 minutes with your tools reinforces a disrupted ward. The DM's party sheet tracks wards on other riders' dragons too.`,
+          intro: (c) => `At the end of a long rest, carve up to ${window.WARD_CAP(c.lvl)} ward${window.WARD_CAP(c.lvl) > 1 ? "s" : ""} into willing dragons within reach. Put the same ward on several dragons, or stack different wards on one dragon. A ward works only while its dragon is within 60 ft. of ${c.dragon || "your bonded dragon"}, and ends when you carve a replacement or the dragon drops to 0 HP. During a short rest, 10 minutes with your tools reinforces a disrupted ward. Wards you place show up on that rider's sheet and on the DM's party sheet.`,
           active: (lvl) => window.WARD_CAP(lvl),
-          countTargets: true,
-          activeLabel: "wards", targetLabel: "Warded dragon(s)", targetPh: "Which dragon? Separate several with commas", defaultTarget: "own",
+          /* Targets are party dragons (rider ids from PARTY_DRAGONS), and the placed wards are
+             shared through party/wards so each rider's sheet and the DM's party sheet show them. */
+          pickDragons: true, sharePath: "party/wards", acFor: (keys, lvl) => wardAC(keys, lvl),
+          normalize: (st) => {
+            Object.keys(st.active).forEach((k) => {
+              const v = st.active[k]; if (Array.isArray(v)) return;
+              const ids = targets(v).map((t) => { const d = (window.PARTY_DRAGONS || []).find((x) => sameDragon(x.dragon, t) || sameDragon(x.rider, t)); return d ? d.id : null; }).filter(Boolean);
+              st.active[k] = ids.length ? ids : [window.CHARACTER_ID];
+            });
+          },
+          activeLabel: "wards", targetLabel: "Warded dragons", defaultTarget: "own",
           options: [
             { key: "deflection", name: "Ward of Deflection", text: "The dragon gets +1 AC while the ward lasts." },
             { key: "resonance", name: "Ward of Resonance", uses: { max: 1, reset: "short" }, text: (c) => `Once per short rest, the dragon's bite or breath weapon deals an extra ${c.lvl >= 15 ? "1d8" : c.lvl >= 9 ? "1d6" : "1d4"} force damage on a hit.` },
@@ -152,6 +157,12 @@ window.CLASSES.artificer = {
 
 function infKnown(lvl) { return lvl >= 18 ? 12 : lvl >= 14 ? 10 : lvl >= 10 ? 8 : lvl >= 6 ? 6 : lvl >= 2 ? 4 : 0; }
 function infItems(lvl) { return lvl >= 18 ? 6 : lvl >= 14 ? 5 : lvl >= 10 ? 4 : lvl >= 6 ? 3 : lvl >= 2 ? 2 : 0; }
+/* AC a set of wards gives one dragon: Bonded +2 or Deflection +1, and +1 more for any ward at warden level 15. */
+function wardAC(keys, lvl) {
+  let ac = keys.includes("bonded") ? 2 : keys.includes("deflection") ? 1 : 0;
+  if (lvl >= 15 && keys.length) ac += 1;
+  return ac;
+}
 function targets(v) { return String(v || "").split(",").map((t) => t.trim()).filter(Boolean); }
 /* True once the dragon's size tier unlocks the Essence Pool at this character level. */
 function essenceAt(total) {

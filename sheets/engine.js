@@ -59,6 +59,7 @@
   let UI = { tab: "overview", edit: false, spellView: "prepared", open: {}, rollMode: "normal" };
   try { Object.assign(UI, JSON.parse(lsGet(LS_UI) || "{}"), { edit: false }); } catch (e) { /* ignore */ }
   let MODAL = null;        // { type, ...data }
+  let WARDS_IN = null;     // party/wards: Hidecarved Wards a Dragonwarden has placed on party dragons
   const ART = { portrait: null, dragon: null };
 
   function migrate(s) {
@@ -72,6 +73,10 @@
     s.customFeatures = s.customFeatures || [];
     s.panels = Object.assign({}, clone(d.panels || {}), s.panels || {});
     Object.keys(s.panels).forEach((k) => { const p = s.panels[k]; p.active = p.active || {}; p.known = p.known || null; p.used = p.used || {}; p.charges = p.charges || {}; });
+    (s.classes || []).forEach((c) => {
+      const C = window.CLASSES[c.id]; const sub = C && C.subclasses && C.subclasses[c.sub];
+      [].concat((C && C.panels) || [], (sub && sub.panels) || []).forEach((P) => { if (P.normalize && s.panels[P.id]) P.normalize(s.panels[P.id], s); });
+    });
     s.exhaustion = s.exhaustion || 0;
     s.conditions = s.conditions || "";
     s.heroPoints = Math.max(0, Math.min(3, +s.heroPoints || 0));
@@ -160,8 +165,19 @@
     D.weight = s.inventory.reduce((x, i) => x + (+i.qty || 0) * (+i.wt || 0), 0);
     const dBonus = { ac: 0, why: [] };
     D.classes.forEach((c) => { if (c.sub && c.sub.dragonBonus) { const b = c.sub.dragonBonus(s, c.level); dBonus.ac += b.ac || 0; dBonus.why.push(...(b.why || [])); } });
+    const wIn = wardsForMe();
+    if (wIn && wIn.ac) { dBonus.ac += wIn.ac; dBonus.why.push(`${wIn.from}'s wards +${wIn.ac}`); }
     D.dragon = deriveDragon(s, total, pb, dBonus);
     return D;
+  }
+  /* Wards another rider's Dragonwarden placed on this sheet's dragon: { from, near, ac, list: [{name, text}] } or null.
+     The warden's own sheet tracks its wards itself. */
+  function wardsForMe() {
+    const W = WARDS_IN, me = window.CHARACTER_ID;
+    if (!W || !W.warden || W.warden === me) return null;
+    const list = ((W.info || {})[me] || []).filter((x) => x && x.name);
+    if (!list.length) return null;
+    return { from: W.wardenName || "The Dragonwarden", near: W.dragonName || "", ac: +((W.ac || {})[me]) || 0, list };
   }
   /* Option panels (infusions, wards…) from every class and subclass the character has. */
   function panelsFor(D) {
@@ -348,8 +364,58 @@
     else if (S.concentration && d > 0) txt += `. Concentration: CON save DC ${Math.max(10, Math.floor(d / 2))}`;
     return txt;
   }
+  /* Hidecarved Wards: the warden's sheet writes party/wards; every sheet and the DM's party sheet read it.
+     { at, by, warden, wardenName, dragonName, lvl, wards: { riderId: [keys] }, info: { riderId: [{key, name, text}] }, ac: { riderId: n } } */
+  let wardShareWarned = false;
+  function shareWards() {
+    const D = derive();
+    panelsFor(D).forEach(({ P, c }) => {
+      if (!P.sharePath) return;
+      const st = S.panels[P.id] || { active: {} };
+      const wards = {}, info = {}, ac = {};
+      Object.keys(st.active).forEach((k) => {
+        const o = P.options.find((x) => x.key === k); if (!o) return;
+        (Array.isArray(st.active[k]) ? st.active[k] : []).forEach((rid) => {
+          (wards[rid] = wards[rid] || []).push(k);
+          (info[rid] = info[rid] || []).push({ key: k, name: o.name, text: typeof o.text === "function" ? o.text(c.ctx) : o.text });
+        });
+      });
+      Object.keys(wards).forEach((rid) => { ac[rid] = P.acFor ? P.acFor(wards[rid], c.level) : 0; });
+      const doc = { at: new Date().toISOString(), by: window.CHARACTER_ID, warden: window.CHARACTER_ID, wardenName: S.name.split(" ")[0],
+        dragonName: S.dragon.name || "", lvl: c.level, wards, info, ac };
+      st.sharedAt = doc.at; WARDS_IN = doc; persist();
+      if (!SYNC.db || !SYNC.canWrite) return;
+      SYNC.db.doc(P.sharePath).set(doc).catch((e) => {
+        if (wardShareWarned) return; wardShareWarned = true;
+        toast("Wards saved on this sheet only", e && e.code === "invalid_argument" ? "The campaign's online rules don't allow sharing wards yet. Ask the DM to update them." : "They couldn't be shared right now. They'll go out with your next change.", 7000);
+      });
+    });
+  }
+  /* Take wards the DM placed from the party sheet into this warden's own tracker. */
+  function adoptWards(doc) {
+    if (!doc || doc.by === window.CHARACTER_ID || doc.warden !== window.CHARACTER_ID) return false;
+    let changed = false;
+    panelsFor(derive()).forEach(({ P }) => {
+      if (!P.sharePath) return;
+      const st = S.panels[P.id]; if (!st || (st.sharedAt && doc.at <= st.sharedAt)) return;
+      const active = {};
+      Object.keys(doc.wards || {}).forEach((rid) => (doc.wards[rid] || []).forEach((k) => { if (P.options.some((o) => o.key === k)) (active[k] = active[k] || []).push(rid); }));
+      st.active = active; st.sharedAt = doc.at; changed = true;
+    });
+    return changed;
+  }
   function watchParty(db) {
     const me = window.CHARACTER_ID, mine = [[me, false], [me + "-dragon", true]];
+    db.doc("party/wards").onSnapshot((s) => {
+      if (s.metadata && s.metadata.hasPendingWrites) return;
+      const d = s.exists ? s.data() : null;
+      if (d && WARDS_IN && WARDS_IN.at > d.at) return; // our own newer write is still on its way
+      WARDS_IN = d;
+      if (adoptWards(d)) { commit(); toast("Wards updated by the DM", "Your Hidecarved Wards changed on the party sheet."); return; }
+      // a warden whose wards were never shared (placed before sharing existed, or offline) shares them now
+      if (!d && !s.metadata?.fromCache && panelsFor(derive()).some(({ P }) => P.sharePath && Object.keys((S.panels[P.id] || {}).active || {}).length)) { shareWards(); return; }
+      render();
+    }, () => {});
     db.doc("party/hp").onSnapshot((s) => {
       const all = (s.exists && s.data()) || {}, seen = dmSeen(), msg = [];
       mine.forEach(([k, dragon]) => {
@@ -471,6 +537,7 @@
         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${syncChip()}
           <span class="chip bronze">Level ${D.total}</span>
           <span class="chip arc">Bonded: ${esc(S.dragon.name || "unnamed " + (D.dragon.K.title || "dragon").toLowerCase())}</span>
+          ${wardsForMe() ? `<span class="chip bronze" title="${esc(wardsForMe().list.map((x) => x.name).join(", "))}">Warded by ${esc(wardsForMe().from)}</span>` : ""}
           ${S.concentration ? `<span class="chip warn">Concentrating: ${esc(S.concentration)} <button class="icon-btn" data-act="endConc" aria-label="End concentration">✕</button></span>` : ""}
         </div>
       </div>
@@ -541,7 +608,16 @@
   }
   /* Active count; with countTargets, "Ametrin, Navarre" counts as two. */
   function panelCount(P, st) {
-    return Object.values(st.active).reduce((n, v) => n + (P.countTargets ? Math.max(1, String(v || "").split(",").filter((t) => t.trim()).length) : 1), 0);
+    return Object.values(st.active).reduce((n, v) => n + (P.pickDragons && Array.isArray(v) ? Math.max(1, v.length) : 1), 0);
+  }
+  /* Chips for each party dragon; an `own` option can only go on this rider's dragon. */
+  function dragonPicker(P, o, ids) {
+    const me = window.CHARACTER_ID;
+    const roster = (window.PARTY_DRAGONS || []).map((d) => (d.id === me ? { ...d, dragon: S.dragon.name || d.dragon } : d));
+    const list = o.own ? roster.filter((d) => d.id === me) : roster;
+    return `<div style="margin-top:6px"><span class="label">${esc(P.targetLabel || "On")}</span>
+      <div class="cchips" style="margin-top:4px">${list.map((d) => { const on = ids.includes(d.id);
+        return `<button class="cchip ${on ? "on" : ""}" style="${on ? "background:var(--bronze);border-color:var(--bronze);color:var(--bronze-ink)" : ""}" data-act="panelPick" data-p="${P.id}" data-k="${o.key}" data-r="${d.id}" aria-pressed="${on}" title="${esc(d.rider)}'s dragon">${esc(d.dragon)}${d.id === me ? "" : ` <span class="small" style="opacity:.75">(${esc(d.rider)})</span>`}</button>`; }).join("")}</div></div>`;
   }
   function panelCard(P, c, D) {
     const st = S.panels[P.id] || (S.panels[P.id] = { known: null, active: {}, used: {}, charges: {} });
@@ -557,8 +633,9 @@
       const early = o.lvl && c.level < o.lvl;
       const uses = o.uses ? `<span class="pips">${Array.from({ length: o.uses.max }, (_, j) => `<button class="pip slot ${(st.used[o.key] || 0) > j ? "on" : ""}" data-act="panelUse" data-p="${P.id}" data-k="${o.key}" data-j="${j}" aria-label="${esc(o.name)} use ${j + 1}"></button>`).join("")}</span> <span class="small muted">${o.uses.reset === "short" ? "per short rest" : "per long rest"}</span>` : "";
       const ch = o.charges && on ? `<div class="choice" style="margin-top:6px"><span class="label">Charges</span><span class="pips">${Array.from({ length: o.charges.max }, (_, j) => `<button class="pip slot ${(st.charges[o.key] || 0) > j ? "on" : ""}" data-act="panelCharge" data-p="${P.id}" data-k="${o.key}" data-j="${j}" aria-label="${esc(o.name)} charge ${j + 1}${(st.charges[o.key] || 0) > j ? " (spent)" : ""}"></button>`).join("")}</span><span class="small muted">${o.charges.max - (st.charges[o.key] || 0)} left · ${esc(o.charges.note || "")}</span></div>` : "";
-      const target = on ? `<label class="small" style="display:block;margin-top:6px">${esc(P.targetLabel || "On")}${o.own ? ` <span class="muted">(${esc(S.dragon.name || "your dragon")} only)</span>` : ""}
-          ${inp(`panels.${P.id}.active.${o.key}`, { label: P.targetLabel || "Target", ph: P.targetPh || "" })}</label>` : "";
+      const target = !on ? "" : P.pickDragons ? dragonPicker(P, o, st.active[o.key] || [])
+        : `<label class="small" style="display:block;margin-top:6px">${esc(P.targetLabel || "On")}${o.own ? ` <span class="muted">(${esc(S.dragon.name || "your dragon")} only)</span>` : ""}
+          ${inp(`panels.${P.id}.active.${o.key}`, { label: P.targetLabel || "Target", ph: P.targetPh || "" })}</label>`;
       const pick = editing && knownSet ? `<input type="checkbox" class="chk" data-act="panelKnow" data-p="${P.id}" data-k="${o.key}" ${knownSet.has(o.key) ? "checked" : ""} aria-label="Know ${esc(o.name)}">` : "";
       return `<div class="feat">
         <h4>${pick}${esc(o.name)}${o.lvl && o.lvl > 2 ? `<span class="badge">Lvl ${o.lvl}</span>` : ""}${on ? `<span class="badge dom">Active</span>` : ""}
@@ -1003,6 +1080,9 @@
           ${K.breath ? `<p class="sb-act"><b><i>${esc(K.breath.name || "Breath Weapon")} (Recharge ${esc(K.breath.recharge || "5–6")}).</i></b> ${esc(K.breath.shape)}. DC ${g.dc} ${esc((K.breath.save || "dex").toUpperCase())} save, <b>${g.tier.breath}</b> ${esc(K.damageType)} damage. ${esc(K.breath.effect)}</p>` : ""}
           ${g.feats.map((f) => `<p class="sb-act"><b><i>${esc(f.name)}.</i></b> ${f.kind ? `<i>${esc(f.kind)}:</i> ` : ""}${esc(f.text)}</p>`).join("")}
           ${ess}
+          ${(() => { const w = wardsForMe(); return w ? `<div class="arc-box" style="background:var(--bronze-soft)"><h3 style="color:var(--bronze)">Hidecarved Wards from ${esc(w.from)}</h3>
+            ${w.list.map((x) => `<p class="small" style="margin:4px 0 0"><b>${esc(x.name)}.</b> ${esc(x.text)}</p>`).join("")}
+            <p class="small muted" style="margin:6px 0 0">${w.ac ? `Already counted in the AC above. ` : ""}Works only while ${esc(nm)} is within 60 ft. of ${esc(w.near || w.from + "'s dragon")}. Ends if ${esc(nm)} drops to 0 HP.</p></div>` : ""; })()}
           <div class="arc-box"><h3>Shared bond</h3><p class="small" style="margin:0">AC is 13 + PB. Attack bonuses and DCs scale with the dragon's proficiency bonus, which grows as you level.</p></div>
         </section>
       </div></div>`;
@@ -1659,11 +1739,11 @@
     panelToggle: (e) => {
       const D = derive(); const pc = panelsFor(D).find((x) => x.P.id === e.dataset.p); if (!pc) return;
       const { P, c } = pc; const st = S.panels[P.id]; const k = e.dataset.k; const o = P.options.find((x) => x.key === k);
-      if (st.active[k] != null) { delete st.active[k]; commit(); return; }
+      if (st.active[k] != null) { delete st.active[k]; commit(); shareWards(); return; }
       const max = P.active ? P.active(c.level) : Infinity;
       if (panelCount(P, st) >= max) { toast(`All ${esc(P.activeLabel || "slots")} in use`, `You can have ${max} at once. End one first.`); return; }
-      st.active[k] = o.own || P.defaultTarget === "own" ? S.dragon.name || "" : "";
-      commit();
+      st.active[k] = P.pickDragons ? [window.CHARACTER_ID] : o.own || P.defaultTarget === "own" ? S.dragon.name || "" : "";
+      commit(); shareWards();
       const el = document.getElementById(`f-panels-${P.id}-active-${k}`); if (el && !el.value) el.focus();
     },
     panelKnow: (e) => {
@@ -1671,6 +1751,22 @@
       const st = S.panels[pc.P.id]; const k = e.dataset.k; const max = pc.P.known(pc.c.level); const set = new Set(st.known || []);
       if (set.has(k)) set.delete(k); else if (set.size >= max) { toast("Known limit reached", `You know ${max} at this level. Untick one first.`); render(); return; } else set.add(k);
       st.known = [...set]; commit();
+    },
+    panelPick: (e) => {
+      const D = derive(); const pc = panelsFor(D).find((x) => x.P.id === e.dataset.p); if (!pc) return;
+      const { P, c } = pc; const st = S.panels[P.id]; const k = e.dataset.k, r = e.dataset.r;
+      const ids = (st.active[k] || []).slice(); const i = ids.indexOf(r);
+      if (i >= 0) { ids.splice(i, 1); if (ids.length) st.active[k] = ids; else delete st.active[k]; }
+      else {
+        const max = P.active ? P.active(c.level) : Infinity;
+        if (panelCount(P, st) >= max) {
+          // at the limit, a ward that's on one dragon moves to the new one
+          if (ids.length === 1) { st.active[k] = [r]; commit(); shareWards(); return; }
+          toast(`All ${esc(P.activeLabel || "slots")} in use`, `You can have ${max} at once. Take one off a dragon first.`); return;
+        }
+        ids.push(r); st.active[k] = ids;
+      }
+      commit(); shareWards();
     },
     panelEdit: (e) => { UI.panelEdit = UI.panelEdit === e.dataset.p ? null : e.dataset.p; render(); },
     panelUse: (e) => { const st = S.panels[e.dataset.p]; const k = e.dataset.k, j = +e.dataset.j; st.used[k] = (st.used[k] || 0) > j ? j : j + 1; commit(); },
