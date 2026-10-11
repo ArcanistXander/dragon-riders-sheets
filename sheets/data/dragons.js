@@ -122,6 +122,25 @@ window.DRAGON_KINDS = {
         text: () => "The dragon leaps at a Medium or smaller creature within 15 feet: a contested Strength (Athletics) check against the target's Athletics or Acrobatics. On a success both fall prone and the target is grappled, taking 1d4 acid damage from the dragon's drool at the start of each of its turns while grappled." }
     ]
   },
+  /* Emerald Hatchling (Cedrick). Numbers from the DM's stat card. */
+  emerald: {
+    title: "Emerald Dragon", family: "Gem",
+    abilities: { str: 14, dex: 15, con: 9, int: 14, wis: 15, cha: 15 },
+    saveBonus: { dex: true, con: true, wis: true, cha: true },
+    speed: "30 ft., fly 40 ft., burrow 15 ft.",
+    immunities: "Psychic",
+    senses: "Blindsight 10 ft., Darkvision 60 ft.",
+    damageType: "psychic",
+    bite: { dice: "1d6", type: "piercing", reach: "5 ft." },
+    breath: {
+      name: "Psychic Breath", recharge: "5–6", shape: "15-foot cone of mental static", save: "int",
+      effect: "Each creature in the cone makes an Intelligence save, taking the damage and losing its reaction until its next turn on a failure."
+    },
+    features: [
+      { level: 3, name: "Refractive Mirage", kind: "Bonus action", per: "short", use: "Blur",
+        text: () => "Bending light across its scales, the dragon casts Blur on itself for 1 minute (no concentration needed). While it lasts, the dragon also has advantage on Dexterity saving throws. Once per short rest." }
+    ]
+  },
   /* Ametrin (Breya). Numbers from the DM's party sheet and Breya's Quest Portal card. */
   amethyst: {
     title: "Amethyst Dragon", family: "Gem",
@@ -184,5 +203,4 @@ window.DRAGON_KINDS = {
         text: (d, rider) => `The dragon pulls the shadows into a 10-foot-radius sphere around itself for 1 minute. It works like Pass without Trace: the dragon, ${rider} and allies in the sphere get +10 to Stealth checks. Once per long rest.` }
     ]
   },
-  emerald:  { title: "Emerald Dragon",  family: "Gem",       damageType: "psychic",  breath: { shape: "15-foot cone", effect: "On a failed save, the target can't take reactions until the start of its next turn." } }
 };

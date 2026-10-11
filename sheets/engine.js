@@ -214,7 +214,12 @@
       ids.forEach((i) => { D.magic.status[i] = i === top ? "on" : "stack"; });
       D.magic.why.push(s.magicItems[top].name);
     });
-    D.ac = armorAC + dexPart + shieldAC + D.armor.misc + D.magic.ac;
+    // Unarmored Defense (monk WIS): a class `unarmored.ac` adds that ability's mod while no armor or shield is worn.
+    // Unarmored Movement: `unarmored.speed(lvl)` adds feet the same way. With two such classes only the first one's AC counts (2014 rule).
+    const ua = D.classes.find((c) => c.C.unarmored);
+    D.unarmored = !body && !shield && ua ? { name: ua.C.unarmored.name, ab: ua.C.unarmored.ac, acBonus: ua.C.unarmored.ac ? mods[ua.C.unarmored.ac] : 0,
+      speed: D.classes.reduce((a, c) => a + (c.C.unarmored && c.C.unarmored.speed ? c.C.unarmored.speed(c.level) : 0), 0) } : null;
+    D.ac = armorAC + dexPart + shieldAC + D.armor.misc + D.magic.ac + (D.unarmored ? D.unarmored.acBonus : 0);
     const fx = { init: 0, speed: 0, hpPerLevel: 0, passive: 0, saves: [], resources: [] };
     (s.feats || []).forEach((f) => {
       const F = (window.FEATS || []).find((x) => x.key === f.key); if (!F || !F.fx) return;
@@ -225,7 +230,7 @@
     D.fx = fx;
     D.init = mods.dex + (+s.initMisc || 0) + fx.init;
     D.eff = conditionEffects(s);
-    D.baseSpeed = (+s.speed || 0) + fx.speed - (D.armor.slow ? 10 : 0);
+    D.baseSpeed = (+s.speed || 0) + fx.speed - (D.armor.slow ? 10 : 0) + (D.unarmored ? D.unarmored.speed : 0);
     D.speed = D.eff.speedZero.length ? 0 : D.eff.speedHalf.length ? Math.floor(D.baseSpeed / 2) : D.baseSpeed;
     D.baseHpMax = s.hp.rolls.reduce((x, y) => x + (+y || 0), 0) + total * (mods.con + fx.hpPerLevel) + (+s.hp.misc || 0);
     D.hpMax = D.eff.hpHalf.length ? Math.floor(D.baseHpMax / 2) : D.baseHpMax;
@@ -1138,9 +1143,9 @@
           ${g.feats.filter((f) => f.kind === "Reaction").slice(0, 1).map((f) => `<div class="res"><div><b>${esc(f.name)}</b> <span class="small muted">reaction${f.per === "short" ? " · once per short rest" : ""}</span></div>
             <div class="choice">${dS.guardUsed ? `<span class="chip warn">${f.per === "short" ? "Used · back after a short rest" : "Used this round"}</span><button class="btn sm" data-act="guardReset">Reset</button>`
               : `<button class="btn sm arc" data-act="guard">Use${f.dice ? ` (${f.dice}${sg(f.diceAbil ? g.m[f.diceAbil] : 0)})` : ""}</button>`}</div></div>`).join("")}
-          ${g.feats.filter((f) => f.kind !== "Reaction" && f.per === "long").map((f) => { const used = (dS.used || {})[f.name];
-            return `<div class="res"><div><b>${esc(f.use || f.name)}</b> <span class="small muted">${esc(f.name)} · once per long rest</span></div>
-            <div class="choice">${used ? `<span class="chip warn">Used · back after a long rest</span><button class="btn sm" data-act="dUseReset" data-k="${esc(f.name)}">Reset</button>`
+          ${g.feats.filter((f) => f.kind !== "Reaction" && (f.per === "long" || f.per === "short")).map((f) => { const used = (dS.used || {})[f.name];
+            return `<div class="res"><div><b>${esc(f.use || f.name)}</b> <span class="small muted">${f.use ? esc(f.name) + " · " : ""}once per ${f.per} rest</span></div>
+            <div class="choice">${used ? `<span class="chip warn">Used · back after a ${f.per} rest</span><button class="btn sm" data-act="dUseReset" data-k="${esc(f.name)}">Reset</button>`
               : `<button class="btn sm arc" data-act="dUse" data-k="${esc(f.name)}">Use</button>`}</div></div>`; }).join("")}
           <div class="res"><div><b>Bite</b> <span class="small muted">${sg(g.biteHit)} to hit</span></div><button class="btn sm" data-act="bite">${physical() ? "Attack" : "Roll attack"}</button></div>
         </section>
@@ -1199,6 +1204,7 @@
     out.push(A.body ? `${A.body.name} ${+A.body.armor.ac || 10}${+A.body.armor.magic ? ` (+${A.body.armor.magic} magic)` : ""}` : "10 unarmored");
     if (A.cat === "heavy") out.push("no DEX (heavy armor)");
     else out.push(`DEX ${sg(A.dexPart)}${A.cat === "medium" ? " (max +2, medium armor)" : ""}`);
+    if (D.unarmored && D.unarmored.ab) out.push(`${D.unarmored.ab.toUpperCase()} ${sg(D.unarmored.acBonus)} (${D.unarmored.name})`);
     if (A.shield) out.push(`${A.shield.name} ${sg(A.shieldAC)}`);
     S.magicItems.forEach((m, i) => { if (D.magic.status[i] === "on" && +m.fx.ac) out.push(`${m.name} ${sg(+m.fx.ac)}`); });
     if (A.misc) out.push(`misc ${sg(A.misc)}`);
@@ -2098,6 +2104,7 @@
       back.forEach((r) => (S.resUsed[r.id] = 0));
       panelsFor(D).forEach(({ P }) => { const st = S.panels[P.id]; if (!st) return; P.options.forEach((o) => { if (o.uses && o.uses.reset === "short" && st.used[o.key]) { st.used[o.key] = 0; back.push({ name: o.name }); } }); });
       if (S.dragon.guardUsed) { const f = D.dragon.feats.find((x) => x.kind === "Reaction"); if (f) back.push({ name: f.name }); }
+      D.dragon.feats.filter((f) => f.kind !== "Reaction" && f.per === "short" && (S.dragon.used || {})[f.name]).forEach((f) => { S.dragon.used[f.name] = false; back.push({ name: f.name }); });
       S.dragon.guardUsed = false; MODAL = null; commit();
       toast("Short rest finished", back.length ? esc(back.map((r) => r.name).join(", ")) + " restored." : "Hit dice spent; nothing else to restore.");
     },
