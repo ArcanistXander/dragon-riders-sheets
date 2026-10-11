@@ -238,7 +238,9 @@
     D.save = (k) => mods[k] + (s.saveProf.includes(k) || fx.saves.includes(k) ? pb : 0) + D.magic.saves;
     D.skill = (k, ab) => mods[ab] + Math.floor((s.skills[k] || 0) * pb);
     D.passive = (k, ab) => 10 + D.skill(k, ab) + (k === "perception" || k === "investigation" ? fx.passive : 0);
-    D.resources = [].concat(...D.classes.map((c) => c.resources), fx.resources).filter((r) => r.max > 0);
+    // A character file can add race trackers (Aasimar Healing Hands…) with window.RACE_RESOURCES(total level, mods).
+    const raceRes = window.RACE_RESOURCES ? window.RACE_RESOURCES(total, mods) : [];
+    D.resources = [].concat(...D.classes.map((c) => c.resources), fx.resources, raceRes).filter((r) => r.max > 0);
     D.carry = s.abilities.str * 15;
     D.weight = s.inventory.reduce((x, i) => x + (+i.qty || 0) * (+i.wt || 0), 0);
     const dBonus = { ac: 0, why: [] };
