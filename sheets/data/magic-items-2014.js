@@ -1,5 +1,8 @@
 /* Magic items — D&D 5e (2014 DMG), summarized for table use. Feeds the Magic items tab's quick-add list.
-   fx (applied while the item is attuned, or carried when it needs no attunement): ac, saves (bonus to every save).
+   fx (applied while the item is attuned, or carried when it needs no attunement): ac, saves (bonus to every save),
+   noArmor (only while wearing no armor and no shield). 5e rule (DMG, "Combining Game Effects"): two copies of the
+   same item don't combine, so only the best one counts; different items, like a Ring and a Cloak of Protection, do.
+   stack (optional): group items the DM rules are "the same", so only the best of them counts.
    charges: { max, recharge } is tracked with pips on the tab. */
 window.MAGIC_ITEMS = [
   { name: "Bag of Holding", type: "Wondrous item", rarity: "Uncommon", text: "Holds up to 500 lb, not exceeding 64 cubic ft, but always weighs 15 lb. Retrieving an item takes an action. Placing it inside another extradimensional space destroys both and opens a gate to the Astral Plane." },
@@ -7,7 +10,9 @@ window.MAGIC_ITEMS = [
   { name: "Cloak of Elvenkind", type: "Wondrous item", rarity: "Uncommon", attune: true, text: "With the hood up, Wisdom (Perception) checks to see you have disadvantage, and you have advantage on Dexterity (Stealth) checks to hide. Raising or lowering the hood takes an action." },
   { name: "Cloak of Protection", type: "Wondrous item", rarity: "Uncommon", attune: true, fx: { ac: 1, saves: 1 }, text: "+1 to AC and saving throws." },
   { name: "Ring of Protection", type: "Ring", rarity: "Rare", attune: true, fx: { ac: 1, saves: 1 }, text: "+1 to AC and saving throws." },
-  { name: "Bracers of Defense", type: "Wondrous item", rarity: "Rare", attune: true, text: "+2 AC while you wear no armor and use no shield. Add it with the Armor settings on the Overview when it applies." },
+  { name: "Bracers of Defense", type: "Wondrous item", rarity: "Rare", attune: true, fx: { ac: 2, noArmor: true }, text: "+2 AC while you wear no armor and use no shield." },
+  { name: "Ioun Stone (Protection)", type: "Wondrous item", rarity: "Rare", attune: true, fx: { ac: 1 }, text: "This rose-pink stone orbits your head: +1 to AC." },
+  { name: "Amulet of Natural Armor", type: "Wondrous item", rarity: "Uncommon", attune: true, fx: { ac: 1 }, text: "Homebrew (not in the 5e books). Your skin toughens like hide: +1 to AC (if the DM gives a stronger one, change it with ✎). A second amulet doesn't add more." },
   { name: "Goggles of Night", type: "Wondrous item", rarity: "Uncommon", text: "You have darkvision out to 60 ft. If you already have darkvision, its range increases by 60 ft." },
   { name: "Gauntlets of Ogre Power", type: "Wondrous item", rarity: "Uncommon", attune: true, text: "Your Strength score is 19. No effect if it's already 19 or higher. Change your STR in edit mode while attuned." },
   { name: "Headband of Intellect", type: "Wondrous item", rarity: "Uncommon", attune: true, text: "Your Intelligence score is 19. No effect if it's already 19 or higher. Change your INT in edit mode while attuned." },
@@ -28,8 +33,8 @@ window.MAGIC_ITEMS = [
   { name: "Hat of Disguise", type: "Wondrous item", rarity: "Uncommon", attune: true, text: "Cast Disguise Self at will. The spell ends if the hat is removed." },
   { name: "Periapt of Wound Closure", type: "Wondrous item", rarity: "Uncommon", attune: true, text: "You stabilize automatically at the start of your turn when dying. Hit dice you spend heal double." },
   { name: "Weapon, +1", type: "Weapon", rarity: "Uncommon", text: "+1 to attack and damage rolls. Set the magic bonus with ✎ on the Attacks tab." },
-  { name: "Armor, +1", type: "Armor", rarity: "Rare", text: "+1 AC. Add it with the Armor settings on the Overview." },
-  { name: "Shield, +1", type: "Armor", rarity: "Uncommon", text: "+1 AC on top of the shield's normal +2. Add it with the Armor settings on the Overview." },
+  { name: "Armor, +1", type: "Armor", rarity: "Rare", text: "+1 AC. On the Inventory tab, use ✎ on the armor and set its magic bonus." },
+  { name: "Shield, +1", type: "Armor", rarity: "Uncommon", text: "+1 AC on top of the shield's normal +2. On the Inventory tab, use ✎ on the shield and set its magic bonus." },
   { name: "Spell Scroll", type: "Scroll", rarity: "Varies", text: "Cast the spell written on it without components, then the scroll crumbles. If the spell isn't on your class list, you can't read it." }
 ];
 

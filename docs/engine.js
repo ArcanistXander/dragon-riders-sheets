@@ -62,6 +62,31 @@
   let WARDS_IN = null;     // party/wards: Hidecarved Wards a Dragonwarden has placed on party dragons
   const ART = { portrait: null, dragon: null };
 
+  /* Armor and shields are inventory rows with `armor: { cat, ac, magic, str, stealth }` and `worn`.
+     Rows named like PHB armor get the stats automatically. The old single armor setting (s.armor)
+     becomes a worn row once, so the AC a sheet had before stays the same. */
+  function armorRow(name) { return (window.ARMOR || []).find((r) => r[0].toLowerCase() === String(name || "").trim().toLowerCase()); }
+  function armorFrom(r) { return { cat: r[1], ac: r[2], magic: 0, str: r[3], stealth: r[4] }; }
+  function migrateArmor(s) {
+    s.inventory = s.inventory || [];
+    s.inventory.forEach((it) => { if (!it.armor) { const r = armorRow(it.name); if (r) it.armor = armorFrom(r); } it.worn = !!(it.armor && it.worn); });
+    if (s.armorV) return;
+    s.armorV = 2;
+    const A = s.armor || {};
+    const find = (n) => s.inventory.find((it) => String(it.name).trim().toLowerCase() === String(n).trim().toLowerCase());
+    if (A.name && !/^no armor$|^none$|^unarmored$/i.test(A.name.trim())) {
+      const r = armorRow(A.name);
+      let it = find(A.name);
+      if (!it) { it = { name: A.name, qty: 1, wt: r ? r[5] : 0, notes: "" }; s.inventory.unshift(it); }
+      it.armor = r ? armorFrom(r) : { cat: A.dexCap == null || A.dexCap === "" ? "light" : +A.dexCap === 0 ? "heavy" : "medium", ac: +A.base || 10, magic: 0, str: 0, stealth: /stealth/i.test(A.note || "") };
+      it.worn = true;
+    }
+    if (A.shield) {
+      let it = find("Shield");
+      if (!it) { it = { name: "Shield", qty: 1, wt: 6, notes: "" }; s.inventory.unshift(it); }
+      it.armor = { cat: "shield", ac: 2, magic: 0, str: 0, stealth: false }; it.worn = true;
+    }
+  }
   function migrate(s) {
     const d = clone(window.DEFAULT_CHARACTER);
     for (const k of Object.keys(d)) if (s[k] === undefined) s[k] = d[k];
@@ -71,6 +96,7 @@
     s.resUsed = s.resUsed || {};
     s.extraSpells = s.extraSpells || [];
     s.customFeatures = s.customFeatures || [];
+    migrateArmor(s);
     s.panels = Object.assign({}, clone(d.panels || {}), s.panels || {});
     Object.keys(s.panels).forEach((k) => { const p = s.panels[k]; p.active = p.active || {}; p.known = p.known || null; p.used = p.used || {}; p.charges = p.charges || {}; });
     (s.classes || []).forEach((c) => {
@@ -144,14 +170,43 @@
     D.caster = D.classes.find((c) => c.dc != null) || null;
     D.slots = slotsFor(s.classes);
     D.maxSpellLevel = D.slots.length;
-    const a = s.armor;
-    const dexPart = a.dexCap == null || a.dexCap === "" ? mods.dex : Math.min(mods.dex, +a.dexCap);
-    // magic items count while attuned, or just carried when they need no attunement
-    D.magic = { ac: 0, saves: 0, why: [] };
-    (s.magicItems || []).filter((m) => m.fx && (!m.attune || m.attuned)).forEach((m) => {
-      D.magic.ac += +m.fx.ac || 0; D.magic.saves += +m.fx.saves || 0; D.magic.why.push(m.name);
+    // AC: worn armor (one suit) + DEX as the armor allows + a worn shield + magic items + misc
+    const worn = (s.inventory || []).filter((it) => it.armor && it.worn);
+    const body = worn.find((it) => it.armor.cat !== "shield") || null, shield = worn.find((it) => it.armor.cat === "shield") || null;
+    const cat = body ? body.armor.cat : "none";
+    const dexPart = cat === "heavy" ? 0 : cat === "medium" ? Math.min(mods.dex, 2) : mods.dex;
+    const armorAC = body ? (+body.armor.ac || 10) + (+body.armor.magic || 0) : 10;
+    const shieldAC = shield ? (+shield.armor.ac || 2) + (+shield.armor.magic || 0) : 0;
+    const profTxt = String((s.profs && s.profs.armor) || "").toLowerCase();
+    D.armor = { body, shield, cat, dexPart, armorAC, shieldAC, misc: +((s.armor || {}).misc) || 0, warn: [] };
+    [body, shield].filter(Boolean).forEach((it) => {
+      const c = it.armor.cat; if (!profTxt.includes(c === "shield" ? "shield" : c) && !profTxt.includes("all armor"))
+        D.armor.warn.push(`Not proficient with ${c === "shield" ? "shields" : c + " armor"} (${it.name}): disadvantage on STR and DEX checks, saves and attacks, and no spellcasting.`);
     });
-    D.ac = (+a.base || 10) + dexPart + (a.shield ? 2 : 0) + (+a.misc || 0) + D.magic.ac;
+    D.armor.slow = !!(body && +body.armor.str && s.abilities.str < +body.armor.str);
+    if (D.armor.slow) D.armor.warn.push(`${body.name} needs STR ${body.armor.str}: speed drops by 10 ft.`);
+    D.armor.stealth = !!(body && body.armor.stealth);
+    // Magic items count while attuned (or carried, when they need no attunement). 5e: copies of the same item
+    // don't combine, so within one item name (or an fx.stack group the DM sets) only the best counts.
+    D.magic = { ac: 0, saves: 0, why: [], status: {} };
+    const groups = {};
+    (s.magicItems || []).forEach((m, i) => {
+      if (!m.fx || !(+m.fx.ac || +m.fx.saves)) return;
+      if (m.attune && !m.attuned) { D.magic.status[i] = "attune"; return; }
+      if (m.fx.noArmor && (body || shield)) { D.magic.status[i] = "armor"; return; }
+      const key = String(m.fx.stack || "item:" + m.name).trim().toLowerCase();
+      (groups[key] = groups[key] || []).push(i);
+    });
+    Object.values(groups).forEach((ids) => {
+      ["ac", "saves"].forEach((k) => {
+        const best = ids.reduce((b, i) => (+s.magicItems[i].fx[k] || 0) > (+s.magicItems[b].fx[k] || 0) ? i : b, ids[0]);
+        D.magic[k] += +s.magicItems[best].fx[k] || 0;
+      });
+      const top = ids.reduce((b, i) => (+s.magicItems[i].fx.ac || 0) + (+s.magicItems[i].fx.saves || 0) > (+s.magicItems[b].fx.ac || 0) + (+s.magicItems[b].fx.saves || 0) ? i : b, ids[0]);
+      ids.forEach((i) => { D.magic.status[i] = i === top ? "on" : "stack"; });
+      D.magic.why.push(s.magicItems[top].name);
+    });
+    D.ac = armorAC + dexPart + shieldAC + D.armor.misc + D.magic.ac;
     const fx = { init: 0, speed: 0, hpPerLevel: 0, passive: 0, saves: [], resources: [] };
     (s.feats || []).forEach((f) => {
       const F = (window.FEATS || []).find((x) => x.key === f.key); if (!F || !F.fx) return;
@@ -162,7 +217,7 @@
     D.fx = fx;
     D.init = mods.dex + (+s.initMisc || 0) + fx.init;
     D.eff = conditionEffects(s);
-    D.baseSpeed = (+s.speed || 0) + fx.speed;
+    D.baseSpeed = (+s.speed || 0) + fx.speed - (D.armor.slow ? 10 : 0);
     D.speed = D.eff.speedZero.length ? 0 : D.eff.speedHalf.length ? Math.floor(D.baseSpeed / 2) : D.baseSpeed;
     D.baseHpMax = s.hp.rolls.reduce((x, y) => x + (+y || 0), 0) + total * (mods.con + fx.hpPerLevel) + (+s.hp.misc || 0);
     D.hpMax = D.eff.hpHalf.length ? Math.floor(D.baseHpMax / 2) : D.baseHpMax;
@@ -566,7 +621,7 @@
     const hdLeft = D.total - S.hitDiceUsed;
     const tile = (label, v, extra = "") => `<div class="stat ${extra}"><span class="label">${label}</span><span class="v">${v}</span></div>`;
     return `<section class="vitals" aria-label="Combat stats"><div class="tiles">
-      ${UI.edit ? `<div class="stat"><span class="label">Armor class</span><span class="v num">${D.ac}</span><button class="btn sm" data-act="tab" data-tab="overview">Armor ↓</button></div>` : tile("Armor class", D.ac)}
+      ${UI.edit ? `<div class="stat"><span class="label">Armor class</span><span class="v num">${D.ac}</span><button class="btn sm" data-act="tab" data-tab="inventory">Armor →</button></div>` : tile("Armor class", D.ac)}
       <div class="stat" style="cursor:pointer" data-act="rollInit"><span class="label">Initiative</span><span class="v">${sg(D.init)}</span></div>
       <div class="stat"><span class="label">Speed</span><span class="v" style="${D.speed !== D.baseSpeed ? "color:var(--bad)" : ""}">${D.speed}<small style="font-size:.9rem"> ft</small></span>${D.speed !== D.baseSpeed ? `<span class="small muted">normally ${D.baseSpeed}</span>` : ""}</div>
       ${tile("Proficiency", sg(D.pb))}
@@ -688,12 +743,9 @@
     const checkChip = cs.mode === "dis" ? `<span class="chip warn" title="${esc(cs.why)}">Disadvantage</span>` : "";
     const anySave = ABIL.some((a) => D.eff.saveFail[a].length || D.eff.saveDis[a].length);
     const saveChip = anySave ? `<span class="chip warn">Affected by conditions</span>` : "";
-    const armor = UI.edit ? `<div class="inline-grid" style="margin-top:8px">
-        <label class="small">Armor ${inp("armor.name", { label: "Armor name" })}</label>
-        <label class="small">Base AC ${inp("armor.base", { num: 1, label: "Base AC" })}</label>
-        <label class="small">Max DEX bonus (blank = none) ${inp("armor.dexCap", { num: 1, label: "Max Dex bonus" })}</label>
+    const armor = UI.edit ? `<p class="small" style="margin:8px 0 0">Put armor and shields on from the <button class="btn sm" data-act="tab" data-tab="inventory">Inventory</button> tab.</p>
+      <div class="inline-grid" style="margin-top:8px">
         <label class="small">Misc AC ${inp("armor.misc", { num: 1, label: "Misc AC" })}</label>
-        <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="armor.shield" ${S.armor.shield ? "checked" : ""}> Shield (+2)</label>
         <label class="small">Speed ${inp("speed", { num: 1, label: "Speed" })}</label>
         <label class="small">Initiative misc ${inp("initMisc", { num: 1, label: "Initiative misc" })}</label>
         <label class="small">HP misc ${inp("hp.misc", { num: 1, label: "HP misc" })}</label>
@@ -717,7 +769,10 @@
       <div class="stack">
         <section class="panel"><h2>Armor & defenses</h2>
           <dl class="kv">
-            <dt>Armor</dt><dd>${esc(S.armor.name)}${S.armor.shield ? " + shield" : ""} · AC ${D.ac}${D.magic.ac ? ` <span class="small muted">(includes ${esc(D.magic.why.join(", "))})</span>` : ""}${S.armor.note ? ` <span class="muted small">(${esc(S.armor.note)})</span>` : ""}</dd>
+            <dt>Armor</dt><dd>${esc(wearingLine(D))} · AC ${D.ac}
+              <div class="small muted">${esc(acParts(D).join(" + "))}</div>
+              ${D.armor.stealth ? `<div class="small" style="color:var(--warn)">Disadvantage on Stealth checks (${esc(D.armor.body.name)})</div>` : ""}
+              ${D.armor.warn.map((w) => `<div class="small" style="color:var(--bad)">${esc(w)}</div>`).join("")}</dd>
             <dt>Defenses</dt><dd>${UI.edit ? inp("defenses", { label: "Defenses" }) : esc(S.defenses)}</dd>
             <dt>Senses</dt><dd>${UI.edit ? inp("senses", { label: "Senses", ph: "e.g. Darkvision 60 ft." }) : esc(S.senses || "—")}</dd>
             <dt>Other effects</dt><dd>${inp("conditionsNote", { label: "Other effects", ph: "Spells or effects on you, e.g. Bless" })}</dd>
@@ -1115,14 +1170,49 @@
       </div></section>`;
   }
 
+  /* ---- Armor class pieces, for the Overview and Inventory ---- */
+  function wearingLine(D) {
+    const A = D.armor; const parts = [A.body ? A.body.name : "No armor", A.shield ? A.shield.name : ""].filter(Boolean);
+    return parts.join(" + ");
+  }
+  function acParts(D) {
+    const A = D.armor, out = [];
+    out.push(A.body ? `${A.body.name} ${+A.body.armor.ac || 10}${+A.body.armor.magic ? ` (+${A.body.armor.magic} magic)` : ""}` : "10 unarmored");
+    if (A.cat === "heavy") out.push("no DEX (heavy armor)");
+    else out.push(`DEX ${sg(A.dexPart)}${A.cat === "medium" ? " (max +2, medium armor)" : ""}`);
+    if (A.shield) out.push(`${A.shield.name} ${sg(A.shieldAC)}`);
+    S.magicItems.forEach((m, i) => { if (D.magic.status[i] === "on" && +m.fx.ac) out.push(`${m.name} ${sg(+m.fx.ac)}`); });
+    if (A.misc) out.push(`misc ${sg(A.misc)}`);
+    return out;
+  }
+
   /* ---- Inventory ---- */
   function inventory(D) {
-    const rows = S.inventory.map((it, i) => `<tr>
-      <td><input id="f-inv-${i}-name" class="f" data-bind="inventory.${i}.name" value="${esc(it.name)}" aria-label="Item name"></td>
+    const catName = { light: "Light armor", medium: "Medium armor", heavy: "Heavy armor", shield: "Shield" };
+    const rows = S.inventory.map((it, i) => {
+      const A = it.armor;
+      const wear = A ? `<button class="btn sm ${it.worn ? "primary" : ""}" data-act="wear" data-i="${i}" aria-pressed="${!!it.worn}" title="${it.worn ? "Take it off" : "Put it on"}">${it.worn ? (A.cat === "shield" ? "Wielded" : "Worn") : A.cat === "shield" ? "Wield" : "Wear"}</button>` : "";
+      const sub = A ? `<div class="small muted" style="margin-top:2px">${catName[A.cat] || "Armor"} · ${A.cat === "shield" ? sg(+A.ac || 2) + " AC" : "AC " + (+A.ac || 10)}${+A.magic ? ` · +${A.magic} magic` : ""}${+A.str ? ` · STR ${A.str}` : ""}${A.stealth ? " · Stealth disadv." : ""}</div>` : "";
+      const main = `<tr>
+      <td><input id="f-inv-${i}-name" class="f" data-bind="inventory.${i}.name" value="${esc(it.name)}" aria-label="Item name">${sub}</td>
       <td><input id="f-inv-${i}-qty" class="f n" type="number" data-num="1" data-bind="inventory.${i}.qty" value="${esc(it.qty)}" aria-label="Quantity"></td>
       <td><input id="f-inv-${i}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.wt" value="${esc(it.wt)}" aria-label="Weight each"></td>
       <td><input id="f-inv-${i}-notes" class="f" data-bind="inventory.${i}.notes" value="${esc(it.notes)}" aria-label="Notes"></td>
-      <td><button class="icon-btn" data-act="delItem" data-i="${i}" aria-label="Remove ${esc(it.name)}">✕</button></td></tr>`).join("");
+      <td>${wear}</td>
+      <td style="white-space:nowrap"><button class="icon-btn edit" data-act="invEdit" data-i="${i}" aria-label="Armor settings for ${esc(it.name)}" aria-expanded="${UI.invEdit === i}">✎</button><button class="icon-btn" data-act="delItem" data-i="${i}" aria-label="Remove ${esc(it.name)}">✕</button></td></tr>`;
+      if (UI.invEdit !== i) return main;
+      const box = A ? `<div class="inline-grid">
+          <label class="small">Kind<select id="f-inv-${i}-cat" class="f" data-bind="inventory.${i}.armor.cat">${["light", "medium", "heavy", "shield"].map((c) => `<option value="${c}" ${A.cat === c ? "selected" : ""}>${catName[c]}</option>`).join("")}</select></label>
+          <label class="small">${A.cat === "shield" ? "AC bonus" : "Base AC"}${inp(`inventory.${i}.armor.ac`, { num: 1, label: "Armor AC" })}</label>
+          <label class="small">Magic bonus (+1, +2…)${inp(`inventory.${i}.armor.magic`, { num: 1, label: "Magic bonus" })}</label>
+          ${A.cat === "shield" ? "" : `<label class="small">STR needed (0 = none)${inp(`inventory.${i}.armor.str`, { num: 1, label: "Strength needed" })}</label>
+          <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="inventory.${i}.armor.stealth" ${A.stealth ? "checked" : ""}> Stealth disadvantage</label>`}
+        </div><div class="choice" style="margin-top:8px"><button class="btn sm" data-act="invEdit" data-i="${i}">Done</button><button class="btn sm" data-act="notArmor" data-i="${i}">It's not armor</button></div>`
+        : `<p class="small" style="margin:0 0 8px">Is this armor or a shield? Turn it into one so it can be worn and counted in your AC.</p>
+          <div class="choice"><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="light">Light armor</button><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="medium">Medium armor</button><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="heavy">Heavy armor</button><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="shield">Shield</button><button class="btn sm" data-act="invEdit" data-i="${i}">Cancel</button></div>`;
+      return main + `<tr><td colspan="6" style="background:var(--panel-2)">${box}</td></tr>`;
+    }).join("");
+    const armorOpts = (window.ARMOR || []).map((r) => `<option value="${esc(r[0])}">${esc(r[0])} · ${r[1] === "shield" ? "+2 AC" : r[1] + ", AC " + r[2]}</option>`).join("");
     const coins = ["cp", "sp", "ep", "gp", "pp"].map((c) => `<label class="stat"><span class="label">${c}</span>${inp("coins." + c, { num: 1, label: c, style: "width:100%" })}</label>`).join("");
     const over = D.weight > D.carry;
     const att = S.magicItems.filter((m) => m.attuned).length;
@@ -1130,10 +1220,17 @@
       <div class="stack">
         ${potionPanel(D)}
         <section class="panel"><div class="ph"><h2>Equipment</h2><button class="btn sm" data-act="addItem">Add item</button></div>
-          <div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+          <div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th>Wear</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
         </section>
       </div>
       <div class="stack">
+        <section class="panel"><div class="ph"><h2>Armor class</h2><span class="chip bronze">AC ${D.ac}</span></div>
+          <p style="margin:0">${esc(wearingLine(D))}</p>
+          <p class="small muted" style="margin:4px 0 0">${esc(acParts(D).join(" + "))} = <b>${D.ac}</b></p>
+          ${D.armor.stealth ? `<p class="small" style="margin:6px 0 0;color:var(--warn)">Disadvantage on Stealth checks.</p>` : ""}
+          ${D.armor.warn.map((w) => `<p class="small" style="margin:6px 0 0;color:var(--bad)">${esc(w)}</p>`).join("")}
+          <div class="choice" style="margin-top:10px"><select id="add-armor" class="f" style="width:auto;flex:1" aria-label="Armor to add"><option value="">Add armor from the Player's Handbook…</option>${armorOpts}</select><button class="btn sm" data-act="addArmor">Add</button></div>
+          <p class="small muted" style="margin:8px 0 0">Wear one suit of armor and one shield at a time. Light armor adds all of your DEX, medium up to +2, heavy none. Ring and Cloak of Protection and similar items count from the Magic items tab once attuned. Two copies of the same item don't add together.</p></section>
         <section class="panel"><h2>Coins</h2><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px">${coins}</div></section>
         <section class="panel"><h2>Carrying</h2>
           <dl class="kv"><dt>Carried</dt><dd class="num" style="color:${over ? "var(--bad)" : "inherit"}">${Math.round(D.weight * 10) / 10} lb</dd>
@@ -1181,8 +1278,10 @@
   function magic(D) {
     const att = S.magicItems.filter((m) => m.attuned).length;
     const cards = S.magicItems.map((m, i) => {
-      const live = m.fx && (!m.attune || m.attuned);
-      const fxTxt = m.fx ? [m.fx.ac ? `+${m.fx.ac} AC` : "", m.fx.saves ? `+${m.fx.saves} to saves` : ""].filter(Boolean).join(", ") : "";
+      const st = D.magic.status[i];
+      const fxTxt = m.fx ? [+m.fx.ac ? `+${m.fx.ac} AC` : "", +m.fx.saves ? `+${m.fx.saves} to saves` : ""].filter(Boolean).join(", ") : "";
+      const fxWhy = { on: ", already counted on your sheet.", attune: ", once you attune to it.", armor: ". Not counting: only works while you wear no armor and no shield.",
+        stack: ". Not counting: another copy of this item already gives you its bonus, and copies don't add together." }[st] || ".";
       const pips = m.charges && +m.charges.max ? `<div class="choice" style="margin-top:6px"><span class="label">Charges</span><span class="pips">${Array.from({ length: +m.charges.max }, (_, j) => `<button class="pip slot ${m.used > j ? "on" : ""}" data-act="miCharge" data-i="${i}" data-j="${j}" aria-label="${esc(m.name)} charge ${j + 1}${m.used > j ? " (spent)" : ""}"></button>`).join("")}</span>
           <span class="small muted">${Math.max(0, m.charges.max - m.used)} left${m.charges.recharge ? " · " + esc(m.charges.recharge) : ""}</span></div>` : "";
       const edit = UI.miEdit === i ? `<div class="inline-grid" style="margin-top:8px">
@@ -1191,6 +1290,9 @@
           <label class="small">Rarity${inp(`magicItems.${i}.rarity`, { label: "Rarity", ph: "Uncommon" })}</label>
           <label class="small">Charges (max)<input id="f-mi-${i}-ch" class="f n" type="number" min="0" data-act-input="miMax" data-i="${i}" value="${m.charges ? +m.charges.max || "" : ""}" aria-label="Maximum charges"></label>
           <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="magicItems.${i}.attune" ${m.attune ? "checked" : ""}> Requires attunement</label>
+          <label class="small">AC bonus${inp(`magicItems.${i}.fx.ac`, { num: 1, label: "AC bonus" })}</label>
+          <label class="small">Bonus to all saves${inp(`magicItems.${i}.fx.saves`, { num: 1, label: "Save bonus" })}</label>
+          <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="magicItems.${i}.fx.noArmor" ${m.fx && m.fx.noArmor ? "checked" : ""}> Only without armor or shield</label>
         </div>
         <label class="small" style="display:block;margin-top:6px">What it does${inp(`magicItems.${i}.text`, { area: 1, rows: 3, label: "What it does" })}</label>
         ${m.charges ? `<label class="small" style="display:block;margin-top:6px">How it recharges${inp(`magicItems.${i}.charges.recharge`, { label: "How it recharges", ph: "e.g. Regains 1d6 + 1 charges at dawn" })}</label>` : ""}
@@ -1201,7 +1303,7 @@
           <button class="icon-btn edit" data-act="miEdit" data-i="${i}" aria-label="Edit ${esc(m.name)}" aria-expanded="${UI.miEdit === i}">✎</button></span></h4>
         <p class="small muted">${esc([m.type, m.attune ? "requires attunement" : ""].filter(Boolean).join(" · "))}</p>
         ${m.text ? `<p>${esc(m.text)}</p>` : ""}
-        ${fxTxt ? `<p class="small" style="color:${live ? "var(--good)" : "var(--muted)"}">${esc(fxTxt)}${live ? ", already counted on your sheet" : ", once you attune to it"}.</p>` : ""}
+        ${fxTxt ? `<p class="small" style="color:${st === "on" ? "var(--good)" : st === "attune" ? "var(--muted)" : "var(--warn)"}">${esc(fxTxt + fxWhy)}</p>` : ""}
         ${pips}${edit}</div>`;
     }).join("");
     const opts = (window.MAGIC_ITEMS || []).map((m) => `<option value="${esc(m.name)}">${esc(m.name)} · ${esc(m.rarity)}${m.attune ? " · attunement" : ""}</option>`).join("");
@@ -1829,7 +1931,25 @@
       commit();
     },
     addItem: () => { S.inventory.push({ name: "", qty: 1, wt: 0, notes: "" }); commit(); const i = S.inventory.length - 1; const el = document.getElementById(`f-inv-${i}-name`); if (el) el.focus(); },
-    delItem: (e) => { S.inventory.splice(+e.dataset.i, 1); commit(); },
+    delItem: (e) => { S.inventory.splice(+e.dataset.i, 1); UI.invEdit = null; commit(); },
+    // armor: one suit and one shield worn at a time
+    wear: (e) => {
+      const it = S.inventory[+e.dataset.i]; if (!it || !it.armor) return;
+      if (it.worn) { it.worn = false; commit(); return; }
+      const sh = it.armor.cat === "shield";
+      S.inventory.forEach((o) => { if (o !== it && o.armor && o.worn && (o.armor.cat === "shield") === sh) o.worn = false; });
+      it.worn = true; commit();
+      const D = derive(); toast(`${sh ? "Wielding" : "Wearing"} ${esc(it.name)}`, `AC is now ${D.ac}.${D.armor.warn.length ? " " + esc(D.armor.warn.join(" ")) : ""}`);
+    },
+    invEdit: (e) => { const i = +e.dataset.i; UI.invEdit = UI.invEdit === i ? null : i; render(); },
+    makeArmor: (e) => { const it = S.inventory[+e.dataset.i]; const k = e.dataset.k; it.armor = { cat: k, ac: k === "shield" ? 2 : k === "heavy" ? 14 : k === "medium" ? 12 : 11, magic: 0, str: 0, stealth: false }; commit(); },
+    notArmor: (e) => { const it = S.inventory[+e.dataset.i]; delete it.armor; it.worn = false; UI.invEdit = null; commit(); },
+    addArmor: () => {
+      const r = armorRow(($("#add-armor") || {}).value);
+      if (!r) { toast("Pick armor first", "Choose one from the list, then press Add."); return; }
+      S.inventory.unshift({ name: r[0], qty: 1, wt: r[5], notes: "", armor: armorFrom(r), worn: false });
+      UI.invEdit = null; commit(); toast(`${esc(r[0])} added`, "Press Wear to put it on.");
+    },
     /* Healing potions: heal whoever drinks by the typed (or rolled) total and take one off the stack. */
     drink: (e, ev, rolled) => {
       const i = +e.dataset.i; const it = S.inventory[i]; const P = it && potionKind(it.name); if (!P || !(+it.qty > 0)) return;

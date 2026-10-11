@@ -38,3 +38,21 @@ window.WEAPONS = [
   ["Heavy Crossbow", "martial", "ranged", "1d10", "piercing", "Ammunition, heavy, loading, two-handed", "100/400"],
   ["Longbow", "martial", "ranged", "1d8", "piercing", "Ammunition, heavy, two-handed", "150/600"]
 ];
+
+/* Armor — D&D 5e (2014 PHB). Row: [name, category, AC, strength needed, stealth disadvantage, weight lb]
+   Light adds all of DEX, medium adds DEX up to +2, heavy adds none. A shield adds its AC (+2) on top. */
+window.ARMOR = [
+  ["Padded Armor", "light", 11, 0, true, 8],
+  ["Leather Armor", "light", 11, 0, false, 10],
+  ["Studded Leather Armor", "light", 12, 0, false, 13],
+  ["Hide Armor", "medium", 12, 0, false, 12],
+  ["Chain Shirt", "medium", 13, 0, false, 20],
+  ["Scale Mail", "medium", 14, 0, true, 45],
+  ["Breastplate", "medium", 14, 0, false, 20],
+  ["Half Plate", "medium", 15, 0, true, 40],
+  ["Ring Mail", "heavy", 14, 0, true, 40],
+  ["Chain Mail", "heavy", 16, 13, true, 55],
+  ["Splint Armor", "heavy", 17, 15, true, 60],
+  ["Plate Armor", "heavy", 18, 15, true, 65],
+  ["Shield", "shield", 2, 0, false, 6]
+];
