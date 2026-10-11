@@ -1004,7 +1004,7 @@
         <div class="ph"><h2>Spellcasting · ${esc(c.C.name)}</h2>
           <span class="seg" role="group" aria-label="Spell list view">
             <button data-act="spellView" data-k="prepared" aria-pressed="${UI.spellView === "prepared"}">${knownCaster(c.C) ? "Known" : "Prepared"}</button>
-            <button data-act="spellView" data-k="all" aria-pressed="${UI.spellView === "all"}">Full ${esc(c.C.name.toLowerCase())} list</button>
+            <button data-act="spellView" data-k="all" aria-pressed="${UI.spellView === "all"}">Full ${esc(c.C.listName || c.C.name.toLowerCase())} list</button>
           </span></div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px" class="small">
           <span><span class="label">Ability</span> <b>${ABIL_NAME[c.ability]}</b></span>

@@ -62,6 +62,7 @@ window.CLASSES.rogue = {
         spellcasting: { ability: "int", progression: "third", list: "wizard", known: true, firstSlotLevel: 3 },
         cantripsKnown: [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
         preparedCount: (lvl) => [0, 0, 0, 3, 4, 4, 4, 5, 6, 6, 7, 8, 8, 9, 10, 10, 11, 11, 11, 12, 13][lvl],
+        listName: "wizard",
         prepLabel: "from the Arcane Trickster table",
         spellTip: "Arcane Tricksters learn wizard spells and keep them; there's nothing to prepare after a rest. Most must be enchantment or illusion: only the spells you learn at 3rd, 8th, 14th and 20th level can come from any school. When you gain a rogue level you can also swap one spell you know for another wizard spell (enchantment or illusion unless it replaces a free pick). Mage Hand is always one of your cantrips.",
         knownTip: "Tick the spells you learn at this level. Pick enchantment or illusion unless this level gives a free pick (3rd, 8th, 14th, 20th). You can also untick one spell you know and learn another in its place."
