@@ -113,13 +113,14 @@
     const D = { total, pb, mods, classes: [] };
     s.classes.forEach((c) => {
       const C = CLASSES[c.id]; const sub = C.subclasses && C.subclasses[c.sub];
-      const ctx = { lvl: c.level, total, pb, mod: (a) => mods[a] };
+      const ctx = { lvl: c.level, total, pb, mod: (a) => mods[a], dragon: s.dragon && s.dragon.name };
       const feats = [];
       for (let l = 1; l <= c.level; l++) {
         (C.features[l] || []).forEach((f) => feats.push({ ...f, level: l, src: C.name, text: typeof f.text === "function" ? f.text(ctx) : f.text }));
         if (sub) (sub.features[l] || []).forEach((f) => feats.push({ ...f, level: l, src: sub.name, text: typeof f.text === "function" ? f.text(ctx) : f.text }));
       }
-      const sc = C.spellcasting; const out = { ...c, C, sub, ctx, feats, resources: C.resources ? C.resources(c.level, mods) : [] };
+      const sc = C.spellcasting; const out = { ...c, C, sub, ctx, feats,
+        resources: (C.resources ? C.resources(c.level, mods, total) : []).concat(sub && sub.resources ? sub.resources(c.level, mods, total) : []) };
       if (sc) {
         const am = mods[sc.ability];
         out.dc = 8 + pb + am; out.atk = pb + am; out.ability = sc.ability;
@@ -538,12 +539,16 @@
   function panels(D) {
     return `<div class="grid2">${panelsFor(D).map(({ P, c }) => panelCard(P, c, D)).join("")}</div>`;
   }
+  /* Active count; with countTargets, "Ametrin, Navarre" counts as two. */
+  function panelCount(P, st) {
+    return Object.values(st.active).reduce((n, v) => n + (P.countTargets ? Math.max(1, String(v || "").split(",").filter((t) => t.trim()).length) : 1), 0);
+  }
   function panelCard(P, c, D) {
     const st = S.panels[P.id] || (S.panels[P.id] = { known: null, active: {}, used: {}, charges: {} });
     const txt = (v) => (typeof v === "function" ? v(c.ctx) : v || "");
     const maxActive = P.active ? P.active(c.level) : Infinity;
     const maxKnown = P.known ? P.known(c.level) : null;
-    const nActive = Object.keys(st.active).length;
+    const nActive = panelCount(P, st);
     const knownSet = maxKnown == null ? null : new Set(st.known || []);
     const editing = UI.panelEdit === P.id;
     const shown = P.options.filter((o) => editing || !knownSet || knownSet.has(o.key) || st.active[o.key] != null);
@@ -1182,7 +1187,9 @@
     }).join("");
     const rows = [];
     for (let l = 1; l <= 20; l++) {
-      const names = (C.features[l] || []).map((f) => f.name).concat(sub ? (sub.features[l] || []).map((f) => f.name) : []);
+      // hideFuture: homebrew subclass features stay secret until the level is reached
+      const showSub = sub && !(sub.hideFuture && l > P.nc.level);
+      const names = (C.features[l] || []).map((f) => f.name).concat(showSub ? (sub.features[l] || []).map((f) => f.name) : []);
       const slots = sc ? slotsFor([{ id: L.classId, level: l }]) : [];
       const cls = l < P.nc.level ? "past" : l === P.nc.level ? "cur" : "";
       rows.push(`<tr class="${cls}"><td class="num">${l}</td><td class="num">${sg(pbFor(l))}</td><td>${names.map(esc).join(", ") || "—"}</td>${sc ? `<td class="num">${C.cantripsKnown[l]}</td>${[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => `<td class="num">${slots[i] || "–"}</td>`).join("")}` : ""}</tr>`);
@@ -1654,7 +1661,7 @@
       const { P, c } = pc; const st = S.panels[P.id]; const k = e.dataset.k; const o = P.options.find((x) => x.key === k);
       if (st.active[k] != null) { delete st.active[k]; commit(); return; }
       const max = P.active ? P.active(c.level) : Infinity;
-      if (Object.keys(st.active).length >= max) { toast(`All ${esc(P.activeLabel || "slots")} in use`, `You can have ${max} at once. End one first.`); return; }
+      if (panelCount(P, st) >= max) { toast(`All ${esc(P.activeLabel || "slots")} in use`, `You can have ${max} at once. End one first.`); return; }
       st.active[k] = o.own || P.defaultTarget === "own" ? S.dragon.name || "" : "";
       commit();
       const el = document.getElementById(`f-panels-${P.id}-active-${k}`); if (el && !el.value) el.focus();

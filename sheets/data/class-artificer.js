@@ -86,23 +86,44 @@ window.CLASSES.artificer = {
     dragonwarden: {
       name: "Dragonwarden",
       alwaysLabel: "Dragonwarden",
-      domainSpells: { 3: ["Heroism", "Shield"] },
+      /* From the DM's "The Dragonwarden Subclass" document. Later features stay hidden
+         until she reaches their level (hideFuture keeps them out of the level-up table). */
+      hideFuture: true,
+      domainSpells: { 3: ["Heroism", "Shield"], 5: ["Warding Bond", "Barkskin"], 9: ["Intellect Fortress"], 13: ["Freedom of Movement"], 17: ["Wall of Force"] },
       intWeapons: true,
+      resources: (lvl, mods, total) => [
+        { id: "runic", name: "Runic Resonance", max: lvl >= 9 && !essenceAt(total) ? Math.max(1, mods.int) : 0, reset: "long",
+          note: "Once your dragon has an Essence Pool, each use costs 1 Essence Point instead." }
+      ],
       features: {
         3: [
           { name: "Tool Proficiency", text: "You gain proficiency with mason's tools or calligrapher's supplies, which you use to etch wards into scale, stone or hide." },
-          { name: "Dragonwarden Spells", text: "Heroism and Shield are always prepared and don't count against your prepared spells." },
-          { name: "Warden's Training", text: "You gain proficiency with martial weapons. When you attack with a magic weapon, you can use your Intelligence modifier instead of Strength or Dexterity for the attack and damage rolls." },
-          { name: "Draconic Warding", text: (c) => `At the end of a long rest, carve Hidecarved Wards into willing dragons within reach: ${window.WARD_CAP(c.lvl)} ward${window.WARD_CAP(c.lvl) > 1 ? "s" : ""} at a time. A ward works only while you're within 60 ft. of the dragon and lasts until you carve a new one or the dragon drops to 0 HP. Re-carving a broken ward takes 10 minutes. The dragon keeps its own statistics. Track wards on the Infusions & wards tab.` }
+          { name: "Dragonwarden Spells", text: "Heroism and Shield are always prepared. They count as artificer spells for you but don't count against your prepared spells." },
+          { name: "Battle Ready", text: "You gain proficiency with martial weapons. When you attack with a magic weapon, you can use your Intelligence modifier instead of Strength or Dexterity for the attack and damage rolls." },
+          { name: "Draconic Warding", text: (c) => `At the end of a long rest, carve Hidecarved Wards into willing dragons within reach: ${window.WARD_CAP(c.lvl)} ward${window.WARD_CAP(c.lvl) > 1 ? "s" : ""} at a time. Spread them one per dragon, or concentrate several on one dragon to stack their effects. A ward works only while the warded dragon is within 60 ft. of your own bonded dragon, and lasts until you carve a replacement or the dragon drops to 0 HP. During a short rest, 10 minutes with your tools reinforces a ward that was disrupted (this doesn't restore HP). Your dragon keeps its own statistics. Track wards on the Infusions & wards tab.` }
         ],
-        5: [{ name: "Draconic Warding (2 wards)", text: "You can keep two Hidecarved Wards active. Ask the DM about the rest of this level's Dragonwarden features." }],
-        9: [{ name: "Draconic Warding (3 wards)", text: "You can keep three Hidecarved Wards active, and Ward of Resonance deals 1d6. Ask the DM about the rest of this level's Dragonwarden features." }],
-        15: [{ name: "Draconic Warding (4 wards)", text: "You can keep four Hidecarved Wards active, Ward of Resonance deals 1d8, and every warded dragon gets +1 AC. Ask the DM about the rest of this level's Dragonwarden features." }]
+        5: [
+          { name: "Dragonwarden Spells", text: "Warding Bond and Hardened Scales (Barkskin) are always prepared." },
+          { name: "Extra Attack", text: "You can attack twice, instead of once, whenever you take the Attack action on your turn." },
+          { name: "Draconic Warding: 2 wards", text: "You can maintain two Hidecarved Wards, on up to two dragons." }
+        ],
+        9: [
+          { name: "Dragonwarden Spells", text: "Intellect Fortress is always prepared." },
+          { name: "Draconic Warding: 3 wards", text: "You can maintain three Hidecarved Wards, on up to three dragons. Ward of Resonance now deals 1d6." },
+          { name: "Runic Resonance", text: (c) => `When you hit with a magic weapon attack, or a dragon bearing one of your wards hits, channel energy through the strike: Disruptive Resonance (the target takes an extra ${c.lvl >= 15 ? "4d6" : "2d6"} force) or Restorative Resonance (a creature or object you can see within 30 ft. of the target regains ${c.lvl >= 15 ? "4d6" : "2d6"} HP). Each use costs 1 point from your dragon's Essence Pool. Until your dragon has an Essence Pool, you get ${Math.max(1, c.mod("int"))} uses (INT modifier) per long rest instead.` }
+        ],
+        13: [{ name: "Dragonwarden Spells", text: "Freedom of Movement is always prepared." }],
+        15: [
+          { name: "Master Wardcarver", text: (c) => `You can maintain four Hidecarved Wards. Runic Resonance damage and healing rise to 4d6. Every dragon bearing one of your wards gets +1 AC on top of its ward. When Ward of the Bonded Dragonwarden imposes disadvantage, the attacker also takes 1d4 ${c.mod("int") >= 0 ? "+" : "−"} ${Math.abs(c.mod("int"))} force damage.` },
+          { name: "Ward of Resonance", text: "Ward of Resonance now deals 1d8." }
+        ],
+        17: [{ name: "Dragonwarden Spells", text: "Wall of Force is always prepared." }]
       },
-      /* Bonus a ward gives the warden's own dragon, for its stat block. */
+      /* Bonus a ward gives the warden's own dragon, for its stat block.
+         A ward's target may list several dragons ("Ametrin, Navarre"). */
       dragonBonus: (s, lvl) => {
         const on = ((s.panels || {}).wards || {}).active || {};
-        const mine = (k) => on[k] != null && (k === "bonded" || sameDragon(on[k], s.dragon.name));
+        const mine = (k) => on[k] != null && (k === "bonded" || targets(on[k]).some((t) => sameDragon(t, s.dragon.name)));
         let ac = 0; const why = [];
         if (mine("bonded")) { ac += 2; why.push("Bonded ward +2"); }
         else if (mine("deflection")) { ac += 1; why.push("Deflection ward +1"); }
@@ -112,15 +133,16 @@ window.CLASSES.artificer = {
       panels: [
         {
           id: "wards", title: "Hidecarved Wards",
-          intro: (c) => `At the end of a long rest, carve wards into willing dragons within reach: ${window.WARD_CAP(c.lvl)} active at a time, one per dragon. A ward works only while you're within 60 ft. of the dragon, and ends when you carve a replacement or the dragon drops to 0 HP. Re-carving a broken ward (once the dragon is stable) takes 10 minutes. The DM's party sheet tracks wards on other riders' dragons too.`,
+          intro: (c) => `At the end of a long rest, carve up to ${window.WARD_CAP(c.lvl)} ward${window.WARD_CAP(c.lvl) > 1 ? "s" : ""} into willing dragons within reach. Put the same ward on several dragons (list them with commas), or stack different wards on one dragon. A ward works only while its dragon is within 60 ft. of ${c.dragon || "your bonded dragon"}, and ends when you carve a replacement or the dragon drops to 0 HP. During a short rest, 10 minutes with your tools reinforces a disrupted ward. The DM's party sheet tracks wards on other riders' dragons too.`,
           active: (lvl) => window.WARD_CAP(lvl),
-          activeLabel: "wards", targetLabel: "Warded dragon", targetPh: "Which dragon?", defaultTarget: "own",
+          countTargets: true,
+          activeLabel: "wards", targetLabel: "Warded dragon(s)", targetPh: "Which dragon? Separate several with commas", defaultTarget: "own",
           options: [
             { key: "deflection", name: "Ward of Deflection", text: "The dragon gets +1 AC while the ward lasts." },
             { key: "resonance", name: "Ward of Resonance", uses: { max: 1, reset: "short" }, text: (c) => `Once per short rest, the dragon's bite or breath weapon deals an extra ${c.lvl >= 15 ? "1d8" : c.lvl >= 9 ? "1d6" : "1d4"} force damage on a hit.` },
             { key: "aegis", name: "Ward of Aegis", text: (c) => `At the start of each combat, the dragon gains ${c.lvl} temporary HP (your artificer level).` },
-            { key: "swiftness", name: "Ward of Swiftness", text: "Choose when you carve it: +10 ft. flying speed, or advantage on the dragon's first saving throw each combat." },
-            { key: "bonded", name: "Ward of the Bonded Dragonwarden", own: true, uses: { max: 1, reset: "short" }, text: "Your own dragon only. +2 AC instead of +1. Once per short rest, when a creature within 5 ft. of your dragon hits it, use your reaction to give that attack disadvantage." }
+            { key: "swiftness", name: "Ward of Swiftness", text: "+10 ft. flying speed, or advantage on the dragon's next saving throw each combat (choose when the ward triggers)." },
+            { key: "bonded", name: "Ward of the Bonded Dragonwarden", own: true, uses: { max: 1, reset: "short" }, text: (c) => `Your own dragon only. +2 AC instead of +1. Once per short rest, when a creature within 5 ft. of your dragon hits it, use your reaction to give that attack disadvantage.${c.lvl >= 15 ? ` The attacker also takes 1d4 ${c.mod("int") >= 0 ? "+" : "−"} ${Math.abs(c.mod("int"))} force damage.` : ""}` }
           ]
         }
       ]
@@ -130,6 +152,14 @@ window.CLASSES.artificer = {
 
 function infKnown(lvl) { return lvl >= 18 ? 12 : lvl >= 14 ? 10 : lvl >= 10 ? 8 : lvl >= 6 ? 6 : lvl >= 2 ? 4 : 0; }
 function infItems(lvl) { return lvl >= 18 ? 6 : lvl >= 14 ? 5 : lvl >= 10 ? 4 : lvl >= 6 ? 3 : lvl >= 2 ? 2 : 0; }
+function targets(v) { return String(v || "").split(",").map((t) => t.trim()).filter(Boolean); }
+/* True once the dragon's size tier unlocks the Essence Pool at this character level. */
+function essenceAt(total) {
+  const R = window.DRAGON_RULES; if (!R) return false;
+  const sizes = R.tiers.map((t) => t.size); let cur = R.tiers[0];
+  R.tiers.forEach((t) => { if (total >= t.level) cur = t; });
+  return sizes.indexOf(cur.size) >= sizes.indexOf(R.essence.unlockSize);
+}
 function sameDragon(a, b) { return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase(); }
 
 /* Shared slot tables used by every caster. */

@@ -113,6 +113,9 @@ window.SPELLS.artificer = [
    count as artificer spells for her even though they aren't on the main list. */
 window.SPELLS.dragonwarden = [
   ["Heroism",1,"Enchantment","1 action","Touch","V, S","1 minute","C","A willing creature can't be frightened and gains temporary HP equal to your spellcasting modifier at the start of each of its turns. +1 target per slot level above 1st."],
+  ["Warding Bond",2,"Abjuration","1 action","Touch","V, S, M","1 hour","","A willing creature gets +1 AC, +1 to saving throws and resistance to all damage while within 60 ft. of you. You take the same damage it takes. Needs a pair of platinum rings worth 50 gp each."],
+  ["Barkskin",2,"Transmutation","1 action","Touch","V, S, M","1 hour","C","Hardened Scales: a willing creature's skin (or a dragon's scales) hardens, and its AC can't be lower than 16, whatever armor it wears."],
+  ["Wall of Force",5,"Evocation","1 action","120 ft","V, S, M","10 minutes","C","An invisible wall of force (a dome, sphere or up to ten 10-ft. panels) appears. Nothing physically passes through it, and it is immune to all damage. Disintegrate destroys it."],
   ["Shield",1,"Abjuration","1 reaction","Self","V, S","1 round","","When you're hit by an attack or targeted by magic missile: +5 AC until the start of your next turn, including against the triggering attack, and no damage from magic missile."]
 ];
 
