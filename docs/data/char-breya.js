@@ -1,7 +1,7 @@
 /* Breya — starting state (Artificer 3, Dragonwarden), from her Quest Portal sheet (2026-10-10).
    The live sheet saves its own copy; this is only the first-load default. */
 window.CHARACTER_ID = "breya";
-window.DEFAULT_ART = {};
+window.DEFAULT_ART = { portrait: "art/breya.webp", dragon: "art/breya-dragon.webp" };
 window.DEFAULT_CHARACTER = {
   name: "Breya",
   player: "Krispin",
