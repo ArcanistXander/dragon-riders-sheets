@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dragon Riders of Arcanum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+/* Layout: one DM-screen ledger. Summary strip of party weak points, one row per rider, each with a fold-out dragon row tied to it. */
+:root{
+  --bg:#eef0eb; --panel:#f8f9f6; --ink:#1c2226; --muted:#5d676b; --rule:#cfd5cf;
+  --accent:#1f6f62; --accent-soft:#d8ebe6; --fly:#8a5a12; --fly-soft:#f2e6cf;
+  --weak:#a3322a; --weak-soft:#f6dcd8; --good:#2d6a2f;
+  --display:"Alegreya SC",Georgia,serif; --body:"Alegreya Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#14191b; --panel:#1c2326; --ink:#e3e8e5; --muted:#97a3a4; --rule:#2f393c;
+  --accent:#5fbfae; --accent-soft:#1f3a36; --fly:#e0b267; --fly-soft:#3a2f1d;
+  --weak:#f08a7f; --weak-soft:#43211e; --good:#8fd093; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14191b; --panel:#1c2326; --ink:#e3e8e5; --muted:#97a3a4; --rule:#2f393c;
+  --accent:#5fbfae; --accent-soft:#1f3a36; --fly:#e0b267; --fly-soft:#3a2f1d;
+  --weak:#f08a7f; --weak-soft:#43211e; --good:#8fd093; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.4}
+main{max-width:1240px;margin:0 auto;padding-inline:16px;padding-block:24px 48px;display:grid;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:700;font-size:2rem;margin:0;line-height:1.05;text-wrap:balance}
+h3{font-family:var(--display);font-size:1.05rem;margin:0;font-weight:700}
+.sub{color:var(--muted);margin:4px 0 0}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;font-weight:500;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+button.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:4px 8px}
+button.mini{padding:1px 8px;font-size:.8rem}
+.status{color:var(--muted);font-size:.9rem;align-self:center}
+.notice{background:var(--fly-soft);color:var(--ink);border-radius:6px;padding:8px 12px;font-size:.92rem;margin:0}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sum{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;display:grid;gap:2px}
+.sum .k{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sum .v{font-family:var(--display);font-size:1.25rem;font-variant-numeric:tabular-nums}
+.sum .w{font-size:.85rem;color:var(--muted)}
+.wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:8px}
+table{border-collapse:collapse;width:100%;min-width:1100px;font-variant-numeric:tabular-nums}
+th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:left;padding:10px 10px 6px;border-bottom:2px solid var(--rule);white-space:nowrap}
+td{padding:10px;border-bottom:1px solid var(--rule);vertical-align:top}
+tr.rider td{border-bottom:0}
+tr.drow td{padding:0 10px 14px}
+tr:last-child td{border-bottom:0}
+.name{font-family:var(--display);font-weight:700;font-size:1.1rem;line-height:1.1}
+.race{color:var(--muted);font-size:.88rem}
+.cls{font-size:.92rem}
+.lvl{display:inline-block;background:var(--accent-soft);color:var(--accent);font-weight:700;border-radius:4px;padding:0 6px;font-size:.82rem;margin-right:4px}
+.big{font-family:var(--display);font-size:1.45rem;font-weight:700;line-height:1}
+.minor{color:var(--muted);font-size:.82rem}
+.num{text-align:center}
+.save{display:inline-block;min-width:2.2em;text-align:center;font-weight:700;font-size:1rem;padding:1px 4px;border-radius:4px}
+.save.weak{background:var(--weak-soft);color:var(--weak)}
+.save.strong{color:var(--good)}
+.saves{display:grid;grid-template-columns:repeat(3,auto);gap:4px 8px;justify-content:start}
+.sv{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.sv .lbl{width:2.2em}
+.prof{font-style:normal;color:var(--accent);font-size:.6rem}
+.flag{font-size:.68rem;font-weight:700;border-radius:3px;padding:0 4px}
+.flag.fail{background:var(--weak);color:var(--panel)}
+.flag.dis{background:var(--weak-soft);color:var(--weak)}
+.fly{display:inline-block;background:var(--fly-soft);color:var(--fly);border-radius:4px;padding:1px 6px;font-weight:700;white-space:nowrap}
+.note{font-size:.86rem;color:var(--muted);max-width:28ch}
+.hp{display:grid;gap:4px;min-width:200px}
+.hpbar{height:6px;background:var(--rule);border-radius:3px;overflow:hidden}
+.hpbar i{display:block;height:100%;background:var(--accent)}
+.hpbar i.low{background:var(--weak)}
+.hprow{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+input,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:3px 6px;width:100%;box-sizing:border-box;font-variant-numeric:tabular-nums}
+textarea{min-height:3.6em;resize:vertical;font-size:.88rem}
+input.n{width:4em;text-align:center}
+input[type=color]{width:3em;height:1.9em;padding:1px}
+input[type=checkbox]{width:auto}
+select{font:inherit;font-size:.85rem;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:3px 4px;min-width:0;flex:1}
+.edit td{background:color-mix(in srgb,var(--accent-soft) 35%,transparent)}
+.stack{display:grid;gap:4px}
+.lbl{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.dmg{display:flex;gap:4px}
+.dmgbtns{display:flex;gap:4px}
+.dmgbtns button{flex:1;padding:3px 6px;font-size:.85rem}
+button.hurt{color:var(--weak)}
+button.heal{color:var(--good)}
+.log{font-size:.8rem;color:var(--ink);background:var(--bg);border-radius:4px;padding:3px 6px}
+.death{display:grid;gap:3px;background:var(--weak-soft);border-radius:4px;padding:4px 6px}
+.dsrow{display:flex;align-items:center;gap:4px}
+.dsrow .lbl{width:5.5em}
+.dead{color:var(--weak);font-weight:700}
+.stable{color:var(--good);font-weight:700}
+.pips{display:inline-flex;gap:4px;align-items:center;vertical-align:middle}
+.pip{width:16px;height:16px;padding:0;border-radius:50%;border:2px solid var(--fly);background:transparent}
+.pip.on{background:var(--fly)}
+.pip.f{border-color:var(--weak)} .pip.f.on{background:var(--weak)}
+.pip.s{border-color:var(--good)} .pip.s.on{background:var(--good)}
+.conds{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-width:240px}
+.chip{font-size:.75rem;padding:1px 8px;border-radius:999px;color:var(--muted)}
+.chip.on{background:var(--weak-soft);color:var(--weak);border-color:var(--weak);font-weight:700}
+.chip.good.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.chip.insp.on{background:var(--fly-soft);color:var(--fly);border-color:var(--fly)}
+.effects{font-size:.78rem;color:var(--weak);margin-top:4px;max-width:240px}
+.neg{display:flex;align-items:center;gap:5px;margin-top:6px}
+.step{padding:0;width:22px;height:22px;line-height:1;font-weight:700}
+.negn{min-width:1.2em;text-align:center;font-weight:700;color:var(--muted)}
+.negn.on{color:var(--weak)}
+.drained{font-size:.8rem;color:var(--weak);font-weight:700;white-space:nowrap}
+.spd{font-size:.78rem;color:var(--weak);font-weight:700}
+/* Dragon fold-out */
+.dtoggle{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;text-align:left;border-left:5px solid var(--gem,var(--fly));background:var(--bg);border-radius:6px;padding:7px 12px}
+.dtoggle[aria-expanded=true]{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.caret{display:inline-block;transition:transform .15s;color:var(--muted)}
+.dtoggle[aria-expanded=true] .caret{transform:rotate(90deg)}
+.gem{width:12px;height:12px;border-radius:3px;background:var(--gem,var(--fly));transform:rotate(45deg);flex:none}
+.dname{font-family:var(--display);font-weight:700;font-size:1.02rem}
+.pill{font-size:.8rem;background:var(--panel);border:1px solid var(--rule);border-radius:999px;padding:0 8px;white-space:nowrap}
+.pill.down{background:var(--weak-soft);color:var(--weak);border-color:var(--weak);font-weight:700}
+.mini-bar{display:inline-block;width:56px;height:5px;background:var(--rule);border-radius:3px;overflow:hidden;vertical-align:middle;margin-left:4px}
+.mini-bar i{display:block;height:100%;background:var(--accent)}
+.mini-bar i.low{background:var(--weak)}
+.dpanel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;padding:14px;border:1px solid var(--rule);border-top:0;border-left:5px solid var(--gem,var(--fly));border-radius:0 0 6px 6px;background:var(--bg)}
+.dcol{display:grid;gap:10px;align-content:start;min-width:0}
+.dcol h3{border-bottom:1px solid var(--rule);padding-bottom:3px}
+.pair{display:flex;gap:18px;flex-wrap:wrap}
+.scores{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;text-align:center}
+.score{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:3px 0}
+.score b{display:block;font-size:1rem}
+.feat{display:grid;gap:2px}
+.fhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fname{font-family:var(--display);font-weight:700}
+.ftext{font-size:.88rem}
+.rech{font-size:.72rem;font-weight:700;border-radius:3px;padding:0 5px}
+.rech.ready{background:var(--accent-soft);color:var(--accent)}
+.rech.spent{background:var(--weak-soft);color:var(--weak)}
+.rulebox{font-size:.8rem;color:var(--muted);border-top:1px dashed var(--rule);padding-top:6px;margin:0}
+.bondlist{list-style:none;padding:0;margin:0;display:grid;gap:3px;font-size:.84rem}
+.bondlist li.locked{color:var(--muted);opacity:.6}
+.bondlist b{font-weight:700}
+.tac{font-size:.84rem;display:grid;gap:1px}
+.tac .t{font-weight:700}
+.tac .a{color:var(--muted);font-size:.75rem}
+.wardfx{font-size:.8rem;color:var(--accent)}
+.fedit{display:grid;gap:4px;border:1px solid var(--rule);border-radius:6px;padding:6px;background:var(--panel)}
+.frow{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.frow input:not(.n){flex:1;min-width:8em}
+.scoregrid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.scoregrid input{width:100%}
+.profs{display:flex;flex-wrap:wrap;gap:8px;font-size:.82rem}
+.profs label{display:flex;gap:3px;align-items:center}
+footer{color:var(--muted);font-size:.85rem;display:grid;gap:4px}
+dialog{border:1px solid var(--rule);border-radius:8px;background:var(--panel);color:var(--ink);width:min(680px,calc(100vw - 32px));max-height:calc(100vh - 48px);box-sizing:border-box;padding:16px}
+dialog::backdrop{background:rgb(0 0 0 / .5)}
+.dlg-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
+.dlg-head h2{font-family:var(--display);margin:0;font-size:1.4rem}
+dialog textarea{min-height:240px;font-family:ui-monospace,Consolas,monospace;font-size:.78rem}
+.dlg-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+/* Live sheets: riders whose own sheet is on this site report here; the DM can switch any of them to Paper */
+.livetog{display:inline-block;margin-top:4px;padding:1px 8px;font-size:.75rem;border-radius:999px;color:var(--muted);font-weight:700}
+.livetog.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.live{font-size:.78rem;color:var(--accent);font-weight:700;margin-top:2px}
+.live.stale{color:var(--weak)}
+.chip.pend{border:1px dashed currentColor;opacity:.75}
+.cdur{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-top:6px;max-width:240px}
+.cdur input{width:3.2em}.cdur button{padding:2px 8px;font-size:.8rem}
+/* Party / Initiative tabs */
+.vtabs{display:flex;gap:2px;border-bottom:2px solid var(--rule);overflow-x:auto}
+.vtabs button{border:0;border-bottom:3px solid transparent;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);padding:8px 16px;margin-bottom:-2px;font-family:var(--display);font-size:1.05rem;white-space:nowrap}
+.vtabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);background:var(--panel)}
+/* Initiative tracker: turn order on the left, timed effects on the right */
+.ini{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px);gap:16px;align-items:start}
+@media (max-width:860px){.ini{grid-template-columns:minmax(0,1fr)}}
+.ini-main{display:grid;gap:12px}
+.ini-bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:12px 14px}
+.ini-round{display:grid;justify-items:center;min-width:64px}
+.ini-round .rn{font-family:var(--display);font-size:2.2rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.ini-now{display:grid;gap:2px;flex:1;min-width:180px}
+.ini-now b{font-family:var(--display);font-size:1.45rem;line-height:1.1}
+.ini-ctl,.ini-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ini-alert{background:var(--weak-soft);color:var(--weak);border-radius:6px;padding:8px 12px;font-weight:700;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.ini-list{list-style:none;margin:0;padding:0;background:var(--panel);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.ini-row{display:grid;grid-template-columns:1.25rem 4.75rem minmax(0,1fr) auto;gap:6px 16px;align-items:center;padding:10px 14px 10px 10px;border-bottom:1px solid var(--rule)}
+.ini-row:last-child{border-bottom:0}
+.ini-row.drag{border-left:4px solid var(--gem,var(--fly));padding-left:6px}
+.ini-row.cur{background:var(--accent-soft);box-shadow:inset 4px 0 0 var(--accent)}
+.ini-row.held{background:var(--fly-soft)}
+.ini-row.out .name{color:var(--muted)}
+.ini-mark{color:var(--accent);font-weight:700;text-align:center}
+input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15rem;font-weight:700;text-align:center}
+.ini-who{display:grid;gap:2px;min-width:0}
+.ini-who .name{font-size:1.15rem}
+.ini-who .dmin{display:flex;flex-wrap:wrap;gap:6px}
+.ini-who .dmin input{flex:1;min-width:9em;width:auto}
+.ini-who input.ini-name{font-weight:700}
+.ini-sub{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:.85rem;color:var(--muted)}
+.ini-sub .st{font-variant-numeric:tabular-nums}.ini-sub .st b{color:var(--ink);font-weight:700}
+.ini-sub .chip{border:1px solid var(--weak)}
+.tag{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:4px;padding:1px 6px}
+.tag.dm{background:var(--weak-soft);color:var(--weak)}
+.tag.drg{background:var(--fly-soft);color:var(--fly)}
+.tag.hold{background:var(--fly);color:var(--panel)}
+.tag.fx{background:var(--accent-soft);color:var(--accent);text-transform:none;letter-spacing:0}
+.tag.fx.ended{background:var(--weak-soft);color:var(--weak)}
+.tag.down{background:var(--weak);color:var(--panel)}
+.ini-act{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.ini-act button{padding:3px 9px;font-size:.85rem}
+.ini-act button.step{padding:0;width:26px;height:26px}
+@media (max-width:560px){.ini-row{grid-template-columns:1rem 4rem minmax(0,1fr);gap:6px 12px}.ini-act{grid-column:2/-1;justify-content:flex-start}}
+.ini-row.down .ini-who input.ini-name{text-decoration:line-through;color:var(--muted)}
+.mhp{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:4px}
+.mhp input.n{width:4em;padding:2px 4px}
+.mhp button{padding:2px 9px;font-size:.85rem}
+.mhp-g{display:inline-flex;gap:4px;align-items:center}
+.mhp .hpbar{flex-basis:100%;max-width:280px}
+.ini-side{display:grid;gap:10px;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:12px 14px}
+.ini-side h2{font-family:var(--display);margin:0;font-size:1.25rem}
+.fx-form{display:grid;gap:6px}
+.fx-form .r{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fx-form .r>input:not(.n){flex:1;min-width:10em;width:auto}
+.fx{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;display:grid;gap:4px;background:var(--bg)}
+.fx .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.fx .t b{font-family:var(--display);font-size:1.05rem}
+.fx .left{font-weight:700;color:var(--accent);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fx.ended{border-color:var(--weak);background:var(--weak-soft)}
+.fx.ended .left{color:var(--weak)}
+.fx .b{display:flex;flex-wrap:wrap;gap:4px}
+.fx .b button{padding:2px 8px;font-size:.8rem}
+.pick{background:var(--panel);border:2px solid var(--accent);border-radius:8px;padding:12px 14px;display:grid;gap:10px}
+.pk-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pk-head h2{font-family:var(--display);margin:0;font-size:1.2rem}
+.pk-row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:end}
+.pk-row input.n{width:4.5em}
+.pk-roll{display:flex;gap:6px;align-items:center;white-space:nowrap}
+.pk-roll input{width:auto;accent-color:var(--accent)}
+span.chip{border:1px solid var(--rule);display:inline-block}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main id="root"></main>
+
+<script type="application/json" id="party-data">{"updated":"2026-10-06","party":[
+{"id":"ra","name":"Ra","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"Rides Thamior once he can carry a rider","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
+ "dragon":{"name":"Thamior","kind":"Copper","color":"#c0712e","size":"Small","speed":"30 ft., fly 40 ft., climb 30 ft.","str":"15","dex":"10","con":"15","int":"14","wis":"9","cha":"13","saves":"dex,con,wis,cha","defenses":"acid immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Acid Breath","recharge":"5-6","text":"15-ft. cone. Each creature makes a Dex save, DC {dc}: 2d6 acid on a failure, half on a success."},
+  {"name":"Copper Cannonball","text":"Action. Leaps at a Medium or smaller creature within 15 ft.: contested Str (Athletics) vs. the target's Athletics or Acrobatics. On a success both fall prone and the target is grappled, taking 1d4 acid from his drool at the start of each of its turns while grappled."}]}},
+{"id":"breya","name":"Breya","race":"","classes":"Artificer (Dragonwarden)","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"Dragonwarden: inscribes Hidecarved Wards on party dragons at the end of a long rest. Always prepared: Heroism, Shield.",
+ "dragon":{"name":"Ametrin","kind":"Amethyst","color":"#8a5cc4","size":"Small","speed":"30 ft., fly 40 ft. (hover)","str":"13","dex":"12","con":"14","int":"16","wis":"12","cha":"14","saves":"dex,con,wis,cha","defenses":"force immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Force Breath","recharge":"5-6","text":"15-ft. cone of kinetic force. Each creature makes a Str save, DC {dc}: 2d6 force and pushed 10 ft. on a failure; half damage and no push on a success."},
+  {"name":"Gravitational Tinkering","text":"At will: a permanent, invisible Mage Hand that can carry up to 30 lb."},
+  {"name":"Gravity Shift","uses":"1","per":"short","text":"Reaction. When a ranged attack targets Breya, Ametrin bends gravity and the attack roll takes a −2 penalty."}]}},
+{"id":"haratio","name":"Haratio","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"Dark urges: while corrupted, his dragon's breath and light change (see dragon).",
+ "dragon":{"name":"Crystal Hatchling","kind":"Crystal","color":"#3b9bb0","size":"Small","speed":"30 ft., fly 40 ft., burrow 15 ft.","str":"14","dex":"10","con":"15","int":"10","wis":"12","cha":"14","saves":"dex,con,wis,cha","defenses":"radiant immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Radiant Breath","recharge":"5-6","text":"15-ft. cone of starlight. Con save, DC {dc}: 2d6 radiant and blinded until the end of its next turn on a failure; half and not blinded on a success. While Haratio is corrupted: necrotic damage, and frightened instead of blinded."},
+  {"name":"Bioluminescent Truth","text":"Bonus action. Sheds bright daylight in a 15-ft. radius that reveals invisible creatures and illusions. While Haratio is corrupted the light turns violet-black, puts out nonmagical flames and makes magical dim light instead."}]}},
+{"id":"corbin","name":"Corbin","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
+ "dragon":{"name":"Bronze Hatchling","kind":"Bronze","color":"#a8762f","size":"Small","speed":"30 ft., fly 40 ft., swim 30 ft.","str":"15","dex":"10","con":"15","int":"10","wis":"12","cha":"14","saves":"dex,con,wis,cha","defenses":"lightning immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Lightning Breath","recharge":"5-6","text":"20-ft. line, 5 ft. wide. Dex save, DC {dc}: 2d6 lightning on a failure, and the creature loses its reaction until its next turn."},
+  {"name":"Lightning Guard","text":"Reaction. When Corbin or an ally within 5 ft. of the dragon is hit by a melee or ranged weapon attack, reduce the damage by 1d6 {con}."}]}},
+{"id":"valkyrie","name":"Valkyrie","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
+ "dragon":{"name":"Navarre","kind":"Moonstone","color":"#7376c9","size":"Small","speed":"30 ft., fly 40 ft.","str":"14","dex":"14","con":"13","int":"14","wis":"9","cha":"16","saves":"dex,con,wis,cha","defenses":"psychic immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Psychic Breath","recharge":"5-6","text":"15-ft. cone of fey energy. Wis save, DC {dc}: 2d6 psychic and charmed for 1 round on a failure."},
+  {"name":"Feywild Havoc: Minor Illusion","text":"Innate magic, no components. Casts Minor Illusion at will."},
+  {"name":"Feywild Havoc: Color Spray","uses":"1","per":"long","text":"Innate magic, no components. Casts Color Spray."}]}},
+{"id":"coltyn","name":"Coltyn","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
+ "dragon":{"name":"Noctoror Sactr","kind":"Black","color":"#5d7a4c","size":"Small","speed":"30 ft., fly 40 ft., swim 30 ft.","str":"15","dex":"14","con":"13","int":"14","wis":"10","cha":"13","saves":"dex,con,wis,cha","defenses":"acid immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Amphibious","text":"Breathes air and water."},
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Acid Breath","recharge":"5-6","text":"20-ft. line, 5 ft. wide. Dex save, DC {dc}: 2d6 acid. On a failure the acid clings for 1d4 more acid at the start of the creature's next turn."},
+  {"name":"Deep-Lurker's Shroud","uses":"1","per":"long","text":"Action. Pulls shadows into a 10-ft.-radius sphere for 1 minute, working like Pass without Trace (+10 Stealth)."},
+  {"name":"Snuff Light","text":"At will. Puts out any nonmagical light within 30 ft."}]}},
+{"id":"cedrick","name":"Cedrick","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
+ "dragon":{"name":"Emerald Hatchling","kind":"Emerald","color":"#2a9a5e","size":"Small","speed":"30 ft., fly 40 ft., burrow 15 ft.","str":"14","dex":"15","con":"9","int":"14","wis":"15","cha":"15","saves":"dex,con,wis,cha","defenses":"psychic immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
+ "features":[
+  {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
+  {"name":"Psychic Breath","recharge":"5-6","text":"15-ft. cone of mental static. Int save, DC {dc}: 2d6 psychic on a failure, and the creature loses its reaction until its next turn."},
+  {"name":"Refractive Mirage","uses":"1","per":"short","text":"Bonus action. Casts Blur on itself for 1 minute with no concentration. While it lasts, it has advantage on Dex saves."}]}}
+]}</script>
+<script src="js/firebase-config.js"></script>
+<script src="js/cloud.js"></script>
+<script>
+(function(){
+  var DEFAULTS=document.getElementById('party-data').textContent;
+  var STORE='arcanum-riders-sheet', PLAY='arcanum-riders-play';
+  // Riders with their own character sheet on this site. They read it live unless switched to Paper.
+  // Add a line here when a new character sheet goes up (rider id: page).
+  var SHEET_PAGES={corbin:'corbin.html'};
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+  function put(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}
+  var state=JSON.parse(DEFAULTS);
+  var saved=load(STORE); if(saved&&Array.isArray(saved.party))state=saved;
+  var play=load(PLAY)||{};
+  function normPlay(){['hp','temp','death','cond','exh','insp','tandem','used','spent','wards','open'].forEach(function(k){if(!play[k]||typeof play[k]!=='object')play[k]={}})}
+  normPlay();
+  function savePlay(){put(PLAY,play);cloudPush()}
+  function saveState(){put(STORE,state);cloudPush()}
+  var editing=false, dirty=false, statusMsg='', ask='', backup=null, logs={}, lastType={}, rolls={};
+
+  var AB=['str','dex','con','int','wis','cha'];
+  function blankDragon(){return {name:'New dragon',kind:'',color:'#b07a2a',size:'Small',speed:'30 ft., fly 40 ft.',str:'10',dex:'10',con:'10',int:'10',wis:'10',cha:'10',saves:'',defenses:'',senses:'Blindsight 10 ft., darkvision 60 ft.',ac:'',hp:'',bond:'1',tactics:[],aspects:'',features:[{name:'Bite',text:'Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing.'}]}}
+  function fixParty(){state.party.forEach(function(p){if(!p.dragon)p.dragon=blankDragon();if(!Array.isArray(p.dragon.features))p.dragon.features=[];if(!Array.isArray(p.dragon.tactics))p.dragon.tactics=[];})}
+  fixParty();
+
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function n(v){var x=parseInt(String(v==null?'':v).replace('−','-'),10);return isNaN(x)?null:x}
+  function mod(s){var x=n(s);return x==null?null:Math.floor((x-10)/2)}
+  function sg(v){return v==null?'—':(v>=0?'+':'')+v}
+  function pb(p){var l=lvl(p);return l==null?2:Math.ceil(l/4)+1}
+  function byId(id){return state.party.find(function(x){return x.id===id})}
+  function did(p){return p.id+'-dragon'}
+
+  // ---------- Live link: riders' own sheets report their numbers here ----------
+  // A report arrives online (reports/<id>, through js/cloud.js) or, when the sheet was open in this browser, from
+  // localStorage (drsheet-link:<id>). The newest one wins. A rider switched to Paper ignores their sheet.
+  var links={};
+  function isReport(d){return !!d&&d.t==='dr-hero'&&typeof d.id==='string'&&typeof d.at==='string'}
+  function rawLink(id){
+    var best=links[id]||null;
+    try{var l=JSON.parse(localStorage.getItem('drsheet-link:'+id)||'null');if(isReport(l)&&l.id===id&&(!best||l.at>best.at))best=l}catch(e){}
+    return best;
+  }
+  function acceptReport(d){if(!isReport(d)||!byId(d.id))return false;var prev=links[d.id];if(prev&&prev.at>=d.at)return false;links[d.id]=d;return true}
+  function hasSheet(p){return !!(p&&SHEET_PAGES[p.id])}
+  function link(p){return hasSheet(p)&&!p.paper?rawLink(p.id):null}
+  function live(p){var r=link(p);return r&&r.live||null}
+  function liveDragon(p){var r=link(p);return r&&r.dragon||null}
+  function lvl(p){var l=live(p);return l&&l.level!=null?+l.level:n(p.level)}
+  // typed stats, or the live ones: ac, init, pp, dc, speed, sstr…scha
+  function stat(p,k){
+    var l=live(p);
+    if(l){if(k[0]==='s'&&AB.indexOf(k.slice(1))>=0){var v=l.saves&&l.saves[k.slice(1)];return v==null?null:+v}if(l[k]!=null&&l[k]!=='')return +l[k]}
+    return n(p[k]);
+  }
+  function when(iso){
+    var d=new Date(iso); if(isNaN(d)) return {rel:'',abs:'',old:true};
+    var mins=Math.round((Date.now()-d)/60000);
+    var rel=mins<1?'just now':mins<60?mins+' min ago':mins<1440?Math.round(mins/60)+' hr ago':Math.round(mins/1440)+' day'+(mins>=2880?'s':'')+' ago';
+    return {rel:rel,abs:d.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),old:mins>=720};
+  }
+  function liveToggle(p){
+    if(!hasSheet(p)) return '';
+    var on=!p.paper, r=rawLink(p.id), w=r&&when(r.at);
+    return '<div><button class="livetog'+(on?' on':'')+'" data-livetog="'+p.id+'" aria-pressed="'+on+'" title="'+(on?'Reading '+esc(p.name)+'’s own sheet. Switch to Paper to track their stats here instead.':'Tracking the stats typed in here. Switch back to read '+esc(p.name)+'’s own sheet.')+'">'+(on?'● Live sheet':'○ Paper')+'</button></div>'+
+      (on?(r?'<div class="live'+(w.old?' stale':'')+'" title="'+esc(w.abs)+'">Updated '+esc(w.rel)+'</div>':'<div class="live stale">Waiting for their sheet. Open it once on this site.</div>'):'');
+  }
+  // Switch a rider to paper (true) or back to their live sheet. Going to paper starts from the last numbers their sheet
+  // sent, so nothing jumps back to old typed stats. Returns whether anything was copied.
+  function setPaper(p,on){
+    if(!on){delete p.paper;return false}
+    if(p.paper)return false;
+    var r=rawLink(p.id), copied=false, l=r&&r.live, ld=r&&r.dragon;
+    if(l){
+      ['level','ac','init','pp','dc','speed'].forEach(function(k){if(l[k]!=null&&l[k]!==''){p[k]=String(l[k]);copied=true}});
+      if(l.classes)p.classes=l.classes; if(l.race)p.race=l.race; if(l.defenses)p.defenses=l.defenses;
+      if(l.saves)AB.forEach(function(a){if(l.saves[a]!=null)p['s'+a]=String(l.saves[a])});
+      if(l.hp){p.hp=String((+l.exh>=4?2:1)*(+l.hp.max||0));play.hp[p.id]=+l.hp.cur||0;if(+l.hp.temp)play.temp[p.id]=+l.hp.temp;else delete play.temp[p.id]}
+      var oc=play.cond[p.id]={};(l.conds||[]).forEach(function(k){oc[k]=true});
+      play.exh[p.id]=+l.exh||0; play.insp[p.id]=!!l.insp;
+      if(l.death&&(l.death.s||l.death.f))play.death[p.id]={s:+l.death.s||0,f:+l.death.f||0};else delete play.death[p.id];
+    }
+    if(ld&&ld.hp){
+      var id=did(p);play.hp[id]=+ld.hp.cur||0;if(+ld.hp.temp)play.temp[id]=+ld.hp.temp;else delete play.temp[id];
+      if(ld.name)p.dragon.name=ld.name;
+      p.dragon.features.forEach(function(f,i){if(f.recharge){if(ld.breathReady)delete play.spent[id+'#'+i];else play.spent[id+'#'+i]=true}});
+      copied=true;
+    }
+    p.paper=true;return copied;
+  }
+  // Header button: everyone with a sheet to paper, or (when they all are) everyone back to live.
+  function allPaperBtn(){
+    var withSheet=state.party.filter(hasSheet); if(!withSheet.length) return '';
+    return withSheet.every(function(p){return p.paper})?'<button id="all-live" title="Every rider with a sheet on the site reads it live again">All live sheets</button>':
+      '<button id="all-paper" title="Track every rider from the stats typed in here, ignoring their website sheets">All on paper</button>';
+  }
+
+  // ---------- Creatures (riders and dragons share HP, conditions and death saves) ----------
+  function dName(p){var ld=liveDragon(p);return (ld&&ld.name)||p.dragon.name}
+  function dMax(p){var ld=liveDragon(p);if(ld&&ld.hp)return +ld.hp.max||0;var d=p.dragon,o=n(d.hp);if(o!=null)return o;return 20+(lvl(p)||1)+(mod(d.con)||0)}
+  function crit(id){
+    var isD=/-dragon$/.test(id), p=byId(isD?id.slice(0,-7):id); if(!p)return null;
+    if(!isD){var l=live(p);return {id:id,p:p,d:false,name:p.name,max:l&&l.hp?+l.hp.max:n(p.hp),def:l?l.defenses:p.defenses,live:l&&l.hp?l.hp:null}}
+    var ld=liveDragon(p);
+    return {id:id,p:p,d:true,name:dName(p),max:dMax(p),def:p.dragon.defenses,live:ld&&ld.hp?ld.hp:null};
+  }
+  // a rider id (not a dragon) whose own sheet is live: their conditions, exhaustion and inspiration live there
+  function liveRider(id){var p=byId(id);return p&&live(p)?p:null}
+  var dmConds={}, dmPend={};   // what the DM sent to live sheets (party/conds), and what their sheets haven't confirmed yet
+  function pend(id){
+    var pe=dmPend[id], r=rawLink(id); if(!pe) return {};
+    Object.keys(pe).forEach(function(k){if(r&&r.at>=pe[k].at)delete pe[k]});
+    return pe;
+  }
+  function condOn(id){
+    var p=liveRider(id); if(!p) return play.cond[id]||{};
+    var out={}, pe=pend(id); (live(p).conds||[]).forEach(function(k){out[k]=true});
+    Object.keys(pe).forEach(function(k){if(k!=='exh'&&k!=='insp')out[k]=pe[k].on});
+    return out;
+  }
+  function exh(id){var p=liveRider(id);if(!p)return play.exh[id]||0;var pe=pend(id).exh;return pe?pe.v:(+live(p).exh||0)}
+  function inspOn(id){var p=liveRider(id);if(!p)return !!play.insp[id];var pe=pend(id).insp;return pe?!!pe.on:!!live(p).insp}
+  function effMax(c){if(c.max==null)return null;if(c.live)return c.max;return exh(c.id)>=4?Math.floor(c.max/2):c.max}
+  function curHp(c){if(c.live)return +c.live.cur||0;var v=play.hp[c.id],m=effMax(c);if(v==null||isNaN(v))return m;return m!=null?Math.min(v,m):v}
+
+  // ---------- Sending to live sheets: damage and healing (party/hp), conditions (party/conds) ----------
+  var hpCmds={};
+  function sendHp(id,cmd){
+    var c=crit(id);
+    if(!cloudDb){logs[id]='Sending this to '+(c?c.p.name:id)+'’s sheet needs the online connection. Switch them to Paper to track it here.';return false}
+    var q=hpCmds[id]||[], t=Date.now(), last=q.length?Date.parse(q[q.length-1].at):0;
+    if(last>=t)t=last+1; cmd.at=new Date(t).toISOString();
+    hpCmds[id]=q.concat([cmd]).slice(-8);
+    cloudDb.doc('party/hp').set(hpCmds).catch(function(){logs[id]='Couldn’t send that. Check the connection.';softRender()});
+    return true;
+  }
+  var condQueued=false;
+  function sendCond(id,k,val){
+    var p=byId(id);
+    if(!cloudDb){statusMsg='Changing '+(p?p.name:id)+'’s live sheet needs the online connection. Switch them to Paper to track it here instead.';return false}
+    var o=Object.assign({at:new Date().toISOString()},val);
+    (dmConds[id]||(dmConds[id]={}))[k]=o; (dmPend[id]||(dmPend[id]={}))[k]=o;
+    if(!condQueued){condQueued=true;setTimeout(flushConds,0)}
+    return true;
+  }
+  function flushConds(){condQueued=false;if(cloudDb)cloudDb.doc('party/conds').set(dmConds).catch(function(){dmPend={};statusMsg='Couldn’t send that. Check the connection.';render()})}
+  // A condition on or off for anyone: a rider on a live sheet gets it through their sheet; everyone else is tracked here.
+  function setCondFor(id,c,on){
+    if(liveRider(id))return sendCond(id,c,{on:!!on});
+    var o=play.cond[id]||(play.cond[id]={}); o[c]=!!on; savePlay(); return true;
+  }
+
+  // ---------- Damage types and defenses (5e) ----------
+  var TYPES=['untyped','acid','bludgeoning','cold','fire','force','lightning','necrotic','piercing','poison','psychic','radiant','slashing','thunder'];
+  var ALIAS={electric:'lightning',electricity:'lightning',elec:'lightning',physical:'bps',bps:'bps'};
+  // "acid immune, fire resist" · "resistance: cold, fire" · "fire, cold resistance" · "bps resist"
+  function parseDef(s){
+    var out={},mode=null,pending=[];
+    String(s||'').toLowerCase().split(/[,;.]+/).forEach(function(part){
+      var types=[],m=null;
+      (part.match(/[a-z]+/g)||[]).forEach(function(w){
+        if(/^immun/.test(w))m='immune';else if(/^resist/.test(w))m='resist';else if(/^vuln/.test(w))m='vuln';
+        else if(/^advantage$/.test(w)){mode=null;pending=[]}
+        else{var t=ALIAS[w]||w;if(t==='bps')types.push('bludgeoning','piercing','slashing');else if(TYPES.indexOf(t)>0)types.push(t);}
+      });
+      if(m){mode=m;types.concat(pending).forEach(function(t){out[t]=m});pending=[];}
+      else if(mode)types.forEach(function(t){out[t]=mode});
+      else pending=pending.concat(types);
+    });
+    return out;
+  }
+  function defText(s){
+    var d=parseDef(s),g={immune:[],resist:[],vuln:[]};
+    Object.keys(d).forEach(function(t){g[d[t]].push(t)});
+    return [['immune','Immune'],['resist','Resist'],['vuln','Vulnerable']].filter(function(x){return g[x[0]].length}).map(function(x){return x[1]+': '+g[x[0]].join(', ')}).join(' · ');
+  }
+
+  function applyHp(c,amt,heal){
+    var max=effMax(c),cur=curHp(c);if(cur==null)cur=0;
+    var cd=play.cond[c.id]||(play.cond[c.id]={}), ds=play.death[c.id]||{s:0,f:0};
+    if(heal){
+      if(ds.f>=3){logs[c.id]='Dead. Healing has no effect; it takes a spell like revivify.';return;}
+      var nc=max==null?cur+amt:Math.min(max,cur+amt);
+      play.hp[c.id]=nc;
+      var msg='+'+(nc-cur)+' healed'+(nc-cur<amt?' (capped at max)':'')+' → '+nc;
+      if(cur===0&&nc>0){delete play.death[c.id];cd.unconscious=false;msg+='. Conscious again; death saves reset.';}
+      logs[c.id]=msg;
+    } else {
+      var type=lastType[c.id]||'untyped', r=type==='untyped'?null:parseDef(c.def)[type], fin=amt, how='';
+      if(r==='immune'){fin=0;how=' (immune)';}
+      else{
+        if(r==='resist'||cd.petrified){fin=Math.floor(fin/2);how=' (halved: '+(r==='resist'?'resistant':'petrified')+')';}
+        if(r==='vuln'){fin=fin*2;how+=' (doubled: vulnerable)';}
+      }
+      var t=play.temp[c.id]||0, abs=Math.min(t,fin), rest=fin-abs;
+      if(abs){play.temp[c.id]=t-abs;how+=', '+abs+' absorbed by temp HP';}
+      var msg2='−'+fin+(type==='untyped'?'':' '+type)+how;
+      if(cur===0){
+        if(rest>0){
+          if(max!=null&&rest>=max){ds.f=3;msg2+='. Damage at 0 HP ≥ max HP: instant death.';}
+          else{ds.f=Math.min(3,ds.f+1);msg2+='. Hit at 0 HP: +1 death save failure (2 on a crit).'+(ds.f>=3?' Dead.':'');}
+          play.death[c.id]=ds;
+        }
+      } else {
+        var left=cur-rest;
+        if(left<=0){
+          var over=-left; left=0; cd.unconscious=true;
+          if(max!=null&&over>=max){play.death[c.id]={s:0,f:3};msg2+=' → 0. Leftover '+over+' ≥ max HP: instant death.';}
+          else{play.death[c.id]={s:0,f:0};msg2+=' → 0. Unconscious; roll death saves.';}
+          if(cd.concentrating){cd.concentrating=false;msg2+=' Concentration ends.';}
+        } else {
+          msg2+=' → '+left;
+          if(cd.concentrating&&fin>0)msg2+='. Concentration: Con save DC '+Math.max(10,Math.floor(fin/2))+'.';
+        }
+        play.hp[c.id]=left;
+      }
+      logs[c.id]=msg2;
+    }
+    savePlay();
+  }
+
+  // ---------- Conditions (5e, 2014 rules) ----------
+  var CONDS=[
+    ['blinded','Blinded','Blinded: can’t see; fails checks that need sight. Attacks against it have advantage; its attacks have disadvantage.'],
+    ['charmed','Charmed','Charmed: can’t attack the charmer or target it with harmful effects; the charmer has advantage on social checks against it.'],
+    ['deafened','Deafened','Deafened: can’t hear; fails checks that need hearing.'],
+    ['frightened','Frightened','Frightened: disadvantage on checks and attacks while the source is in sight; can’t willingly move closer to it.'],
+    ['grappled','Grappled','Grappled: speed 0. Ends if the grappler is incapacitated or it’s moved out of reach.'],
+    ['incapacitated','Incapacitated','Incapacitated: no actions or reactions.'],
+    ['invisible','Invisible','Invisible: its attacks have advantage; attacks against it have disadvantage.'],
+    ['paralyzed','Paralyzed','Paralyzed: incapacitated, can’t move or speak. Fails Str and Dex saves. Attacks against it have advantage; hits from within 5 ft. are crits.'],
+    ['petrified','Petrified','Petrified: incapacitated, can’t move or speak. Fails Str and Dex saves. Resistant to all damage (applied above); immune to poison and disease.'],
+    ['poisoned','Poisoned','Poisoned: disadvantage on attack rolls and ability checks.'],
+    ['prone','Prone','Prone: can only crawl; disadvantage on attacks. Attacks from within 5 ft. have advantage, from farther have disadvantage. Standing costs half its speed.'],
+    ['restrained','Restrained','Restrained: speed 0. Attacks against it have advantage; its attacks have disadvantage. Disadvantage on Dex saves.'],
+    ['stunned','Stunned','Stunned: incapacitated, can’t move, speaks falteringly. Fails Str and Dex saves. Attacks against it have advantage.'],
+    ['unconscious','Unconscious','Unconscious: incapacitated, drops what it holds, falls prone. Fails Str and Dex saves. Attacks against it have advantage; hits from within 5 ft. are crits.'],
+    ['concentrating','Concentrating','Concentrating: taking damage calls for a Con save, DC 10 or half the damage, whichever is higher.']];
+  var EXH=['','disadvantage on ability checks','speed halved','disadvantage on attack rolls and saving throws','hit point maximum halved','speed reduced to 0','death'];
+  function condDef(k){return CONDS.find(function(c){return c[0]===k})||null}
+  function condIdFor(name){var nm=String(name||'').trim().toLowerCase();var c=CONDS.find(function(x){return x[1].toLowerCase()===nm});return c?c[0]:''}
+  function saveFlag(id,ab){
+    var cd=condOn(id),e=exh(id);
+    if((ab==='str'||ab==='dex')&&(cd.paralyzed||cd.stunned||cd.unconscious||cd.petrified))return 'fail';
+    if(e>=3||(ab==='dex'&&cd.restrained))return 'dis';
+    return '';
+  }
+  function speedNote(id){
+    var cd=condOn(id),e=exh(id);
+    var zero=['grappled','restrained','paralyzed','petrified','stunned','unconscious'].filter(function(k){return cd[k]});
+    if(e>=5)zero.push('exhaustion 5');
+    if(zero.length)return 'Speed 0 ('+zero.join(', ')+')';
+    if(e>=2)return 'Speed halved (exhaustion)';
+    return '';
+  }
+  function condBlock(id,label){
+    var on=condOn(id), e=exh(id), lr=liveRider(id), pe=lr?pend(id):{}, p=lr||byId(id.replace(/-dragon$/,''));
+    var fx=CONDS.filter(function(c){return on[c[0]]}).map(function(c){return c[2]});
+    if(e)fx.push('Exhaustion '+e+': '+EXH.slice(1,e+1).join('; ')+'. A long rest with food and drink removes 1 level.');
+    if(lr&&live(lr).conc)fx.push('Concentrating on '+live(lr).conc+'.');
+    return '<div class="conds">'+CONDS.map(function(c){
+      return '<button class="chip'+(c[0]==='concentrating'?' good':'')+(on[c[0]]?' on':'')+(pe[c[0]]?' pend':'')+'" data-cond="'+id+'" data-c="'+c[0]+'" aria-pressed="'+(on[c[0]]?'true':'false')+'"'+(pe[c[0]]?' title="Sending to '+esc(p.name)+'’s sheet"':'')+'>'+c[1]+'</button>';
+    }).join('')+'</div>'+durAsk(id)+
+    '<div class="neg"><span class="lbl">Exhaustion</span><button class="step" data-exh="'+id+'" data-d="-1" aria-label="'+esc(label)+': remove a level of exhaustion">−</button><span class="negn'+(e?' on':'')+'">'+e+'</span><button class="step" data-exh="'+id+'" data-d="1" aria-label="'+esc(label)+': add a level of exhaustion">+</button></div>'+
+    (Object.keys(pe).length?'<div class="minor">Sending to '+esc(p.name)+'’s sheet. It lands there next time the sheet is open.</div>':'')+
+    (fx.length?'<div class="effects">'+fx.map(esc).join('<br>')+'</div>':'');
+  }
+  // After a condition goes on during combat, the row asks how long it lasts; a number starts a timer that takes it off again.
+  var condAsk={};
+  function askDuration(id,c){if(ini().round&&condDef(c))condAsk[id]=c}
+  function durAsk(id){
+    var c=condAsk[id]; if(!c||!ini().round) return '';
+    return '<div class="cdur"><span class="minor">'+esc(condDef(c)[1])+' for</span><input class="n" data-cdurn="'+id+'" inputmode="numeric" placeholder="#" aria-label="How many rounds it lasts">'+
+      '<span class="minor">rounds</span><button data-cdurset="'+id+'">Set timer</button><button class="ghost" data-cdurno="'+id+'">Until removed</button></div>';
+  }
+  function setCondTimer(id){
+    var c=condAsk[id], box=document.querySelector('[data-cdurn="'+id+'"]'), r=parseInt(box&&box.value,10), I=ini();
+    if(!c) return;
+    if(!(r>0)){statusMsg='Type how many rounds it lasts, or press Until removed.';render();var bx=document.querySelector('[data-cdurn="'+id+'"]');if(bx)bx.focus();return}
+    I.fx.push({id:'fx'+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:condDef(c)[1],who:entryOf(id),cond:c,applied:[id],anchor:I.round?I.turn:'',total:r,el:0});
+    delete condAsk[id];savePlay();
+    var cr=crit(id);statusMsg=condDef(c)[1]+' on '+(cr?cr.name:id)+' for '+roundsTxt(r)+'. It comes off by itself.';render();
+  }
+  function toggleCond(id,c){
+    var on=!condOn(id)[c], cr=crit(id);
+    if(!setCondFor(id,c,on)){render();return}
+    if(!on){dropCondTimers(id,c);if(condAsk[id]===c)delete condAsk[id]}else askDuration(id,c);
+    if(liveRider(id))statusMsg=(on?'Sent ':'Removing ')+condDef(c)[1].toLowerCase()+(on?' to ':' from ')+cr.name+'’s sheet';
+    render();
+    if(condAsk[id]){var cb=document.querySelector('[data-cdurn="'+id+'"]');if(cb)cb.focus()}
+  }
+
+  // ---------- Pips (shared by tandem uses, feature uses, death saves) ----------
+  function pips(kind,key,total,have,cls,label){
+    var h='';
+    for(var i=0;i<total;i++){var to=(i+1===have)?i:i+1;
+      h+='<button class="pip'+(cls?' '+cls:'')+(i<have?' on':'')+'" data-pk="'+kind+'" data-key="'+esc(key)+'" data-total="'+total+'" data-to="'+to+'" aria-label="'+esc(label)+': set to '+to+' of '+total+'" title="'+have+' of '+total+'"></button>';}
+    return '<span class="pips">'+h+'</span>';
+  }
+
+  function dmgCtl(c){
+    var id=c.id, sel=lastType[id]||'untyped';
+    return '<div class="dmg"><input class="n" id="amt-'+id+'" data-amt="'+id+'" inputmode="numeric" placeholder="amt" aria-label="'+esc(c.name)+' damage or healing amount">'+
+      '<select id="type-'+id+'" data-type="'+id+'" aria-label="'+esc(c.name)+' damage type">'+TYPES.map(function(t){return '<option value="'+t+'"'+(t===sel?' selected':'')+'>'+t.charAt(0).toUpperCase()+t.slice(1)+'</option>'}).join('')+'</select></div>'+
+      '<div class="dmgbtns"><button class="hurt" data-dmg="'+id+'">Damage</button><button class="heal" data-heal="'+id+'">Heal</button>'+(c.live?'<button data-tmp="'+id+'" title="Give temporary HP">Temp</button>':'')+'</div>';
+  }
+  // A rider (or their dragon) on a live sheet: HP straight from that sheet, and damage or healing goes to it.
+  function liveHpBlock(c){
+    var id=c.id, h=c.live, max=+h.max||0, cur=+h.cur||0, t=+h.temp||0, pct=max?Math.max(0,Math.min(100,Math.round(cur/max*100))):0;
+    var r=rawLink(c.p.id), w=when(r.at), dt=defText(c.def), death='';
+    if(!c.d&&cur===0){var ds=(live(c.p).death)||{s:0,f:0};
+      death='<div class="death"><div class="dsrow"><span class="lbl">Death saves</span><span><b style="color:var(--good)">✓ '+(+ds.s||0)+'</b> · <b style="color:var(--weak)">✕ '+(+ds.f||0)+'</b></span></div>'+
+        (ds.f>=3?'<span class="dead">Dead</span>':ds.s>=3?'<span class="stable">Stable at 0 HP.</span>':'<span class="minor">Rolled on their sheet.</span>')+'</div>';}
+    return '<div class="hp"><div><span class="big">'+cur+'</span> <span class="minor">/ '+max+' max</span>'+(t?' <span class="fly">+'+t+' temp</span>':'')+'</div>'+
+      '<div class="hpbar"><i class="'+(pct<=33?'low':'')+'" style="width:'+pct+'%"></i></div>'+
+      '<div class="live'+(w.old?' stale':'')+'" title="'+esc(w.abs)+'">● Live from '+esc(c.p.name)+'’s sheet · '+esc(w.rel)+'</div>'+
+      dmgCtl(c)+(logs[id]?'<div class="log" role="status">'+esc(logs[id])+'</div>':'')+death+
+      (dt?'<div class="minor">'+esc(dt)+'</div>':'')+
+      '<div class="minor">Goes to '+esc(c.p.name)+'’s sheet, which applies resistances and temp HP.</div></div>';
+  }
+  function hpBlock(c){
+    if(c.live)return liveHpBlock(c);
+    var id=c.id, max=effMax(c), cur=curHp(c), t=play.temp[id]||0;
+    var pct=max?Math.max(0,Math.min(100,Math.round((cur||0)/max*100))):0;
+    var dt=defText(c.def), ds=play.death[id]||{s:0,f:0};
+    var death='';
+    if(cur===0){
+      death='<div class="death"><div class="dsrow"><span class="lbl">Successes</span>'+pips('ds-s',id,3,ds.s,'s',c.name+' death save successes')+'</div>'+
+        '<div class="dsrow"><span class="lbl">Failures</span>'+pips('ds-f',id,3,ds.f,'f',c.name+' death save failures')+'</div>'+
+        (ds.f>=3?'<span class="dead">Dead</span>':ds.s>=3?'<span class="stable">Stable at 0 HP. Regains 1 HP after 1d4 hours.</span>':'<span class="minor">DC 10 each turn. Natural 20: back up with 1 HP. Natural 1: two failures.</span>')+'</div>';
+    }
+    return '<div class="hp"><div><span class="big">'+(c.max==null?'—':c.max)+'</span> <span class="minor">max</span>'+
+      (max!=null&&max!==c.max?' <span class="drained">halved → '+max+'</span>':'')+(t?' <span class="fly">+'+t+' temp</span>':'')+'</div>'+
+      '<div class="hprow"><label class="minor" for="cur-'+id+'">Now</label><input class="n" id="cur-'+id+'" data-cur="'+id+'" inputmode="numeric" value="'+(cur==null?'':cur)+'">'+
+      '<label class="minor" for="tmp-'+id+'">Temp</label><input class="n" id="tmp-'+id+'" data-temp="'+id+'" inputmode="numeric" placeholder="0" value="'+(t||'')+'">'+
+      '<button class="ghost" data-full="'+id+'" title="Reset to max">Full</button></div>'+
+      '<div class="hpbar"><i class="'+(pct<=33?'low':'')+'" style="width:'+pct+'%"></i></div>'+
+      dmgCtl(c)+
+      (logs[id]?'<div class="log" role="status">'+esc(logs[id])+'</div>':'')+death+
+      (dt?'<div class="minor">'+esc(dt)+'</div>':'')+'</div>';
+  }
+
+  function savesGrid(vals,id,profs){
+    var nums=vals.filter(function(v){return v!=null}), lo=Math.min.apply(null,nums), hi=Math.max.apply(null,nums), spread=nums.length>1&&lo!==hi;
+    return '<div class="saves">'+AB.map(function(a,i){
+      var v=vals[i], cls=v==null||!spread?'':v===lo?'weak':v===hi?'strong':'', f=saveFlag(id,a);
+      return '<div class="sv"><span class="lbl">'+a+'</span><span class="save '+cls+'">'+sg(v)+'</span>'+(profs&&profs[i]?'<i class="prof" title="Proficient">●</i>':'')+
+        (f?'<span class="flag '+f+'">'+(f==='fail'?'auto-fail':'disadv.')+'</span>':'')+'</div>';
+    }).join('')+'</div>';
+  }
+
+  // ---------- Dragon-Rider Bond (ozu95supein homebrew) ----------
+  var BOND=[[1,'Soulbond','Telepathy with each other within 60 ft.: words, images and emotions.'],
+    [1,'Shared Languages','Rider learns Draconic. Dragon learns Common plus one of the rider’s languages.'],
+    [2,'Bleedover (Dragon)','Dragon gains one skill proficiency the rider has.'],
+    [3,'Bleedover (Rider)','Rider gains one skill proficiency the dragon has.'],
+    [4,'Tandem Tactics','Learn tactics with shared uses, recharged on a short or long rest. Once when initiative is rolled, the pair may swap places in the order.'],
+    [5,'Draconic Aspect','Rider gains a draconic feat: Dragon Fear, Dragon Hide, Dragon Wings, a Gift of the Dragon, or a breath weapon of the dragon’s type.'],
+    [5,'Longevity','Rider’s lifespan ×3 (minimum 150, maximum 1,000 years).'],
+    [6,'Rider Aspect','Dragon gains a feat that fits the rider’s class.'],
+    [7,'Soulbond Range','Telepathy range becomes 200 ft.'],
+    [8,'Draconic Aspect','A second draconic feat for the rider.'],
+    [9,'Rider Aspect','A second rider feat for the dragon.'],
+    [10,'Perfect Soulbond','Range 400 ft. Once each per short rest, roll an Int, Wis or Cha save with advantage while in range.'],
+    [10,'Fight as One','Share one initiative count; choose who goes first each round.']];
+  var TUSES=[0,0,0,0,1,1,1,2,2,2,3], TKNOWN=[0,0,0,0,2,2,2,3,3,3,4];
+  var TACTICS=[
+    ['constant','Constant Pressure','Reaction','When one partner hits, the other makes one weapon attack against the same target, if in range.'],
+    ['goad','Goad and Swap','Bonus action','Both within 5 ft., one in melee: the Activator gets Disengage and swaps places; the Reactor makes one melee attack with advantage.'],
+    ['intercept','Defensive Interception','Reaction','Partner about to be hit by a melee attack: strike the attacker first. Its attack on the partner then has disadvantage.'],
+    ['launch','Tail Launch','Dragon bonus action','Within 5 ft.: the dragon flings the rider 20 ft.; the rider makes one melee attack with advantage at an enemy passed or landed beside.'],
+    ['hammer','Hammer and Anvil','Bonus action','Contested Athletics vs. the target’s Athletics or Acrobatics; on a success push it 10 ft. toward the partner, who attacks with advantage (+ Activator’s Str mod damage).'],
+    ['magical','Magical Offensive','Bonus action','Partner can cast: move half speed and attack at disadvantage. The partner’s next spell or breath at that target gets advantage, or the target has disadvantage on the save.'],
+    ['wind','Wind Rider','Dragon bonus action','Needs Str 15+ or Large size. 15-ft. cone, Str save DC {wind}: pushed 10 ft., prone if failed by 5+. Rider may move 15 ft. in the cone without provoking.'],
+    ['sweep','Sweep and Swap','Dragon action','Creatures within 5 ft. make a Dex save (DC 10 + tail attack bonus) or take the tail’s damage die. Rider then moves within 5 ft. of the dragon without provoking.']];
+  function bondLv(p){var b=n(p.dragon.bond);return Math.max(1,Math.min(10,b||1))}
+
+  // ---------- Dragonwarden wards (Breya's subclass) ----------
+  var WARDS=[['deflection','Deflection','+1 AC.'],
+    ['resonance','Resonance','Once per short rest, bite or breath deals +{res} force on a hit.'],
+    ['aegis','Aegis','At the start of each combat, temp HP equal to the warden’s artificer level ({lvl}).'],
+    ['swiftness','Swiftness','+10 ft. fly speed, or advantage on its next save each combat.'],
+    ['bonded','Bonded Dragonwarden','Warden’s own dragon only. +2 AC instead of +1; once per short rest, a reaction to give disadvantage to an attack from within 5 ft.']];
+  function warden(){return state.party.find(function(p){return /dragonwarden/i.test(p.classes||'')})}
+  function artLvl(w){var m=/artificer\s*(\d+)/i.exec(w.classes||'');return m?+m[1]:(lvl(w)||0)}
+  function wardCap(l){return l>=15?4:l>=9?3:l>=5?2:l>=3?1:0}
+  function wardsOn(p){var o=play.wards[p.id]||{};return WARDS.filter(function(w){return o[w[0]]}).map(function(w){return w[0]})}
+  function placedCount(){return state.party.reduce(function(a,p){return a+wardsOn(p).length},0)}
+  function wardAC(p){
+    var w=warden();if(!w)return 0;var on=wardsOn(p),a=0;
+    if(on.indexOf('bonded')>=0)a+=2;else if(on.indexOf('deflection')>=0)a+=1;
+    if(on.indexOf('bonded')>=0&&on.indexOf('deflection')>=0)a+=1;
+    if(on.length&&artLvl(w)>=15)a+=1;
+    return a;
+  }
+  function dAC(p){var ld=liveDragon(p),o=n(p.dragon.ac);return (ld&&ld.ac!=null?+ld.ac:o!=null?o:13+pb(p))+wardAC(p)}
+
+  function fill(t,p){
+    var d=p.dragon,P=pb(p),c=mod(d.con)||0,s=mod(d.str)||0,ld=liveDragon(p);
+    var hit=ld&&ld.hit!=null?+ld.hit:2+P, dc=ld&&ld.dc!=null?+ld.dc:8+P+c;
+    return esc(t).replace(/\{hit\}/g,sg(hit)).replace(/\{dc\}/g,String(dc)).replace(/\{pb\}/g,sg(P)).replace(/\{con\}/g,(c>=0?'+ ':'− ')+Math.abs(c)).replace(/\{str\}/g,sg(s)).replace(/\{wind\}/g,String(10+s+P));
+  }
+
+  // ---------- Summary ----------
+  function lowest(list){var b=null;list.forEach(function(x){if(x[0]!=null&&(!b||x[0]<b[0]))b=x});return b}
+  function summary(){
+    var R=state.party;
+    function card(k,l,plus,hint){return '<div class="sum"><span class="k">'+k+'</span><span class="v">'+(l?(plus?sg(l[0]):l[0]):'—')+'</span><span class="w">'+(l?esc(l[1]):hint||'add on Edit sheet')+'</span></div>'}
+    var cards=[
+      card('Lowest rider AC',lowest(R.map(function(p){return [stat(p,'ac'),p.name]})),false),
+      card('Lowest dragon AC',lowest(R.map(function(p){return [dAC(p),dName(p)]})),false),
+      card('Lowest Dex save',lowest(R.map(function(p){return [stat(p,'sdex'),p.name]})),true),
+      card('Lowest Con save',lowest(R.map(function(p){return [stat(p,'scon'),p.name]})),true),
+      card('Lowest Wis save',lowest(R.map(function(p){return [stat(p,'swis'),p.name]})),true),
+      card('Lowest passive Perception',lowest(R.map(function(p){return [stat(p,'pp'),p.name]}).concat(R.map(function(p){return [10+(mod(p.dragon.wis)||0),dName(p)]}))),false)];
+    var up=R.filter(function(p){var c=crit(did(p));return curHp(c)>0}).length;
+    var tl=R.reduce(function(a,p){var t=TUSES[bondLv(p)];return a+Math.max(0,t-(play.tandem[p.id]||0))},0);
+    cards.push('<div class="sum"><span class="k">Dragons standing</span><span class="v">'+up+' of '+R.length+'</span><span class="w">'+(tl?tl+' tandem uses left':'Tandem Tactics at bond 4')+'</span></div>');
+    return '<section class="summary" aria-label="Party weak points">'+cards.join('')+'</section>';
+  }
+
+  // ---------- Rider rows ----------
+  function inp(p,k,cls,ph,lbl){return '<input class="'+(cls||'')+'" id="'+k+'-'+p.id+'" data-id="'+p.id+'" data-k="'+k+'" value="'+esc(p[k])+'" placeholder="'+esc(ph||'')+'" aria-label="'+esc(p.name+' '+(lbl||k))+'">'}
+  function riderRow(p){
+    var c=crit(p.id), sn=speedNote(p.id), insp=inspOn(p.id), l=live(p), pi=l?pend(p.id).insp:null;
+    if(editing){
+      return '<tr class="rider edit"><td><div class="stack">'+inp(p,'name','','Name')+inp(p,'race','','Race / species')+
+          (hasSheet(p)?'<span class="minor">Has a live sheet: the stats typed here count only while '+esc(p.name)+' is on Paper.</span>':'')+
+          '<button class="ghost" data-del="'+p.id+'">Remove rider and dragon</button></div></td>'+
+        '<td><div class="stack"><span class="lbl">Level</span>'+inp(p,'level','n')+'<span class="lbl">Class / subclass</span>'+inp(p,'classes','','Fighter (Battle Master)')+'</div></td>'+
+        '<td><div class="stack"><span class="lbl">AC</span>'+inp(p,'ac','n')+'</div></td>'+
+        '<td><div class="stack"><span class="lbl">Max HP</span>'+inp(p,'hp','n')+'<span class="lbl">Resist / immune</span>'+inp(p,'defenses','','poison resist, fire immune','defenses')+'</div></td>'+
+        '<td><div class="stack"><span class="lbl">Walk</span>'+inp(p,'speed','n')+'<span class="lbl">Fly</span>'+inp(p,'fly','n','none')+'<span class="lbl">Fly source</span>'+inp(p,'flyNote','','e.g. mounted')+'</div></td>'+
+        '<td><div class="saves">'+AB.map(function(a){return '<label class="stack"><span class="lbl">'+a+'</span>'+inp(p,'s'+a,'n','+0',a+' save')+'</label>'}).join('')+'</div></td>'+
+        '<td><div class="stack"><span class="lbl">Initiative</span>'+inp(p,'init','n','+0')+'<span class="lbl">Passive Perc.</span>'+inp(p,'pp','n')+'<span class="lbl">Spell DC</span>'+inp(p,'dc','n')+'</div></td>'+
+        '<td><textarea id="notes-'+p.id+'" data-id="'+p.id+'" data-k="notes" aria-label="'+esc(p.name)+' notes">'+esc(p.notes)+'</textarea></td></tr>';
+    }
+    var f=String(p.fly||'').trim(), spd=l&&l.speed!=null?l.speed:p.speed;
+    return '<tr class="rider"><td><div class="name">'+esc(p.name)+'</div><div class="race">'+esc((l&&l.race)||p.race||'—')+'</div>'+liveToggle(p)+
+        '<div class="conds"><button class="chip insp'+(insp?' on':'')+(pi?' pend':'')+'" data-insp="'+p.id+'" aria-pressed="'+insp+'">Inspiration</button>'+(l&&l.hero?'<span class="chip insp on" title="Hero points (homebrew)">Hero pts '+(+l.hero)+'</span>':'')+'</div>'+condBlock(p.id,p.name)+'</td>'+
+      '<td class="cls"><span class="lvl">'+esc(l?l.level:p.level)+'</span>'+esc((l&&l.classes)||p.classes||'—')+'<div class="minor">Proficiency '+sg(pb(p))+'</div>'+(l?'<div class="live">● live</div>':'')+'</td>'+
+      '<td><div class="big">'+esc(stat(p,'ac')==null?'—':stat(p,'ac'))+'</div>'+(l?'<div class="live">● live</div>':'')+'</td>'+
+      '<td>'+hpBlock(c)+'</td>'+
+      '<td><span class="big">'+esc(spd||'—')+'</span> <span class="minor">ft</span>'+(sn?'<div class="spd">'+esc(sn)+'</div>':'')+
+        '<div style="margin-top:6px">'+(f?'<span class="fly">fly '+esc(f)+(/^\d+$/.test(f)?' ft':'')+'</span>':'<span class="minor">no fly</span>')+'</div>'+(p.flyNote?'<div class="minor">'+esc(p.flyNote)+'</div>':'')+'</td>'+
+      '<td>'+savesGrid(AB.map(function(a){return stat(p,'s'+a)}),p.id,l&&l.saveProf?AB.map(function(a){return l.saveProf.indexOf(a)>=0}):null)+(l?'<div class="live">● live</div>':'')+'</td>'+
+      '<td><div class="stack"><div><span class="lbl">Init</span> <b>'+sg(stat(p,'init'))+'</b></div><div><span class="lbl">Passive</span> <b>'+esc(stat(p,'pp')==null?'—':stat(p,'pp'))+'</b></div><div><span class="lbl">Spell DC</span> <b>'+esc(stat(p,'dc')==null?'—':stat(p,'dc'))+'</b></div>'+(l?'<div class="live">● live</div>':'')+'</div></td>'+
+      '<td class="note">'+esc(p.notes)+'</td></tr>';
+  }
+
+  // ---------- Dragon rows ----------
+  function dragonRow(p){
+    var d=p.dragon, id=did(p), c=crit(id), open=editing||!!play.open[p.id];
+    var max=effMax(c), cur=curHp(c), pct=max?Math.max(0,Math.min(100,Math.round(cur/max*100))):0, bl=bondLv(p), tu=TUSES[bl];
+    var on=condOn(id), conds=CONDS.filter(function(x){return on[x[0]]}).map(function(x){return x[1]}), tmp=c.live?+c.live.temp||0:play.temp[id];
+    if(exh(id))conds.push('Exhaustion '+exh(id));
+    var bar='<button class="dtoggle" data-open="'+p.id+'" aria-expanded="'+open+'" aria-controls="panel-'+p.id+'">'+
+      '<span class="caret" aria-hidden="true">▸</span><span class="gem" aria-hidden="true"></span>'+
+      '<span class="dname">'+esc(dName(p))+'</span><span class="minor">'+esc(d.size+' '+(d.kind?d.kind.toLowerCase()+' ':'')+'dragon')+' · '+esc(p.name)+'’s companion</span>'+
+      '<span class="pill">AC '+dAC(p)+'</span>'+
+      '<span class="pill'+(cur===0?' down':'')+'">HP '+cur+' / '+max+(tmp?' +'+tmp:'')+'<span class="mini-bar"><i class="'+(pct<=33?'low':'')+'" style="width:'+pct+'%"></i></span></span>'+
+      (c.live?'<span class="live">● live</span>':'')+
+      '<span class="pill">Bond '+bl+'</span>'+
+      (tu?'<span class="pill">Tandem '+Math.max(0,tu-(play.tandem[p.id]||0))+'/'+tu+'</span>':'')+
+      (wardsOn(p).length?'<span class="pill">Warded</span>':'')+
+      (conds.length?'<span class="minor" style="color:var(--weak)">'+esc(conds.join(', '))+'</span>':'')+'</button>';
+    return '<tr class="drow'+(editing?' edit':'')+'"><td colspan="8" style="--gem:'+esc(d.color||'')+'">'+bar+
+      (open?'<div class="dpanel" id="panel-'+p.id+'">'+(editing?dragonEdit(p):dragonView(p))+'</div>':'')+'</td></tr>';
+  }
+
+  function featHtml(p,f,i){
+    var key=did(p)+'#'+i, extra='', ld=liveDragon(p);
+    if(f.recharge&&ld){
+      extra+='<span class="rech '+(ld.breathReady?'ready':'spent')+'">'+(ld.breathReady?'Ready':'Spent')+'</span><span class="live">● on '+esc(p.name)+'’s sheet</span>';
+    } else if(f.recharge){
+      var spent=!!play.spent[key], min=n(String(f.recharge))||6;
+      extra+='<span class="rech '+(spent?'spent':'ready')+'">'+(spent?'Spent':'Ready')+'</span>'+
+        (spent?'<button class="mini" data-roll="'+esc(key)+'" data-min="'+min+'">Roll recharge</button>':'<button class="mini" data-spend="'+esc(key)+'">Use</button>')+
+        (rolls[key]?'<span class="minor">'+esc(rolls[key])+'</span>':'');
+    }
+    var u=n(f.uses);
+    if(u){var used=play.used[key]||0;extra+=pips('use',key,u,Math.max(0,u-used),'',f.name+' uses')+'<span class="minor">'+Math.max(0,u-used)+'/'+u+' per '+(f.per==='long'?'long':'short')+' rest</span>';}
+    return '<div class="feat"><div class="fhead"><span class="fname">'+esc(f.name)+(f.recharge?' <span class="minor">(Recharge '+esc(f.recharge)+')</span>':'')+'</span>'+extra+'</div><div class="ftext">'+fill(f.text,p)+'</div></div>';
+  }
+
+  function dragonView(p){
+    var d=p.dragon, id=did(p), c=crit(id), P=pb(p), profs=String(d.saves||'').toLowerCase(), ld=liveDragon(p);
+    var pr=AB.map(function(a){return profs.indexOf(a)>=0});
+    var sv=AB.map(function(a,i){var m=mod(d[a]);return m==null?null:m+(pr[i]?P:0)});
+    var wa=wardAC(p), sn=speedNote(id);
+    var col1='<div class="dcol"><div class="pair"><div><span class="lbl">Armor class</span><div class="big">'+dAC(p)+'</div><div class="minor">'+(ld&&ld.ac!=null?'from '+esc(p.name)+'’s sheet':n(d.ac)!=null?'set by hand':'13 + PB '+sg(P)+' natural')+(wa?', +'+wa+' wards':'')+'</div></div>'+
+        '<div style="min-width:0;flex:1"><span class="lbl">Speed</span><div>'+esc(d.speed)+'</div>'+(sn?'<div class="spd">'+esc(sn)+'</div>':'')+'</div></div>'+
+      hpBlock(c)+
+      '<div class="minor">'+(c.live?'Max HP from '+esc(p.name)+'’s sheet':n(d.hp)!=null?'Max HP set by hand':'Max HP = 20 + rider level '+(lvl(p)||1)+' + Con '+sg(mod(d.con)||0))+'</div>'+
+      '<div class="scores">'+AB.map(function(a){return '<div class="score"><span class="lbl">'+a+'</span><b>'+esc(d[a]||'—')+'</b><span class="minor">'+sg(mod(d[a]))+'</span></div>'}).join('')+'</div>'+
+      '<div><span class="lbl">Saving throws</span>'+savesGrid(sv,id,pr)+'</div>'+
+      '<div class="minor">'+esc(d.senses)+'; passive Perception '+(10+(mod(d.wis)||0))+' · Proficiency '+sg(P)+'</div>'+
+      condBlock(id,dName(p))+'</div>';
+    var col2='<div class="dcol"><h3>Actions and traits</h3>'+d.features.map(function(f,i){return featHtml(p,f,i)}).join('')+
+      '<p class="rulebox">Command: the dragon takes the Dodge action on its turn unless '+esc(p.name)+' spends a bonus action to command it. Attack bonus and save DCs follow '+esc(p.name)+'’s proficiency bonus.</p></div>';
+    // Bond column
+    var bl=bondLv(p), tu=TUSES[bl], tk=TKNOWN[bl], known=d.tactics.filter(function(t){return TACTICS.some(function(x){return x[0]===t})});
+    var bond='<div class="dcol"><h3>Dragon-Rider Bond · level '+bl+'</h3><ul class="bondlist">'+
+      BOND.filter(function(b){return b[0]<=bl+1}).map(function(b){
+        var txt=b[2]; if(b[1]==='Soulbond')txt=txt.replace('60 ft.',(bl>=10?'400':bl>=7?'200':'60')+' ft.');
+        return '<li class="'+(b[0]>bl?'locked':'')+'"><b>'+esc(b[1])+'</b>'+(b[0]>bl?' (bond '+b[0]+')':'')+'. '+esc(txt)+'</li>';
+      }).join('')+'</ul>';
+    if(tu){
+      var left=Math.max(0,tu-(play.tandem[p.id]||0));
+      bond+='<div class="fhead"><span class="fname">Tandem Tactics</span>'+pips('tan',p.id,tu,left,'',p.name+' and '+dName(p)+' tandem uses')+'<span class="minor">'+left+'/'+tu+' shared uses · knows '+known.length+' of '+tk+'</span></div>'+
+        (known.length?known.map(function(t){var x=TACTICS.find(function(y){return y[0]===t});return '<div class="tac"><span class="t">'+esc(x[1])+' <span class="a">'+esc(x[2])+'</span></span><span>'+fill(x[3],p)+'</span></div>'}).join(''):'<div class="minor">No tactics chosen yet. Pick them on Edit sheet.</div>');
+    }
+    if(d.aspects)bond+='<div><span class="lbl">Aspects and bleedover</span><div class="ftext">'+esc(d.aspects)+'</div></div>';
+    var w=warden();
+    if(w){
+      var lv=artLvl(w), cap=wardCap(lv), placed=placedCount(), on=play.wards[p.id]||{}, mine=w.id===p.id;
+      var res=lv>=15?'1d8':lv>=9?'1d6':'1d4';
+      bond+='<div><span class="fname">Hidecarved wards</span> <span class="minor">'+esc(w.name)+' has '+placed+' of '+cap+' placed</span><div class="conds" style="max-width:none">'+
+        WARDS.filter(function(x){return x[0]!=='bonded'||mine}).map(function(x){
+          var dis=!on[x[0]]&&placed>=cap;
+          return '<button class="chip good'+(on[x[0]]?' on':'')+'" data-ward="'+p.id+'" data-w="'+x[0]+'" aria-pressed="'+!!on[x[0]]+'"'+(dis?' disabled title="All wards are placed"':'')+'>'+esc(x[1])+'</button>';
+        }).join('')+'</div>'+
+        wardsOn(p).map(function(k){var x=WARDS.find(function(y){return y[0]===k});return '<div class="wardfx">'+esc(x[1]+': '+x[2].replace('{res}',res).replace('{lvl}',lv))+'</div>'}).join('')+
+        (on.aegis?'<button class="mini" data-aegis="'+p.id+'" data-lv="'+lv+'">Start of combat: +'+lv+' temp HP</button>':'')+
+        (wardsOn(p).length?'<div class="minor">Works only within 60 ft. of '+esc(dName(w))+'. Ends if this dragon drops to 0 HP; reinforce in 10 minutes on a short rest.</div>':'')+'</div>';
+    }
+    bond+='</div>';
+    return col1+col2+bond;
+  }
+
+  function din(p,k,cls,ph,lbl){return '<input class="'+(cls||'')+'" id="d'+k+'-'+p.id+'" data-id="'+p.id+'" data-dk="'+k+'" value="'+esc(p.dragon[k])+'" placeholder="'+esc(ph||'')+'" aria-label="'+esc(p.dragon.name+' '+(lbl||k))+'">'}
+  function dragonEdit(p){
+    var d=p.dragon, profs=String(d.saves||'').toLowerCase(), bl=bondLv(p), tk=TKNOWN[bl];
+    var col1='<div class="dcol"><div class="stack"><span class="lbl">Dragon name</span>'+din(p,'name')+'</div>'+
+      '<div class="frow"><label class="stack" style="flex:1"><span class="lbl">Kind</span>'+din(p,'kind','','Copper')+'</label><label class="stack" style="flex:1"><span class="lbl">Size</span>'+din(p,'size','','Small')+'</label>'+
+        '<label class="stack"><span class="lbl">Color</span><input type="color" id="dcolor-'+p.id+'" data-id="'+p.id+'" data-dk="color" value="'+esc(/^#[0-9a-f]{6}$/i.test(d.color)?d.color:'#b07a2a')+'" aria-label="'+esc(d.name)+' color"></label></div>'+
+      '<div class="stack"><span class="lbl">Speed</span>'+din(p,'speed','','30 ft., fly 40 ft.')+'</div>'+
+      '<div class="frow"><label class="stack"><span class="lbl">AC</span>'+din(p,'ac','n','auto')+'</label><label class="stack"><span class="lbl">Max HP</span>'+din(p,'hp','n','auto')+'</label><span class="minor" style="flex:1">Leave blank to use 13 + PB and 20 + rider level + Con.</span></div>'+
+      '<div><span class="lbl">Ability scores</span><div class="scoregrid">'+AB.map(function(a){return '<label class="stack"><span class="lbl">'+a+'</span>'+din(p,a,'n','',a)+'</label>'}).join('')+'</div></div>'+
+      '<div><span class="lbl">Save proficiencies</span><div class="profs">'+AB.map(function(a){return '<label><input type="checkbox" id="dsp-'+a+'-'+p.id+'" data-dsp="'+a+'" data-id="'+p.id+'"'+(profs.indexOf(a)>=0?' checked':'')+'>'+a.toUpperCase()+'</label>'}).join('')+'</div></div>'+
+      '<div class="stack"><span class="lbl">Resist / immune</span>'+din(p,'defenses','','acid immune')+'</div>'+
+      '<div class="stack"><span class="lbl">Senses</span>'+din(p,'senses')+'</div></div>';
+    var col2='<div class="dcol"><h3>Actions and traits</h3><p class="minor" style="margin:0">In text, {hit} becomes the attack bonus, {dc} the breath DC (8 + PB + Con), {pb} the proficiency bonus, {con} the Con modifier.</p>'+
+      d.features.map(function(f,i){
+        function fi(k,cls,ph,lbl){return '<input class="'+(cls||'')+'" id="f'+k+'-'+i+'-'+p.id+'" data-id="'+p.id+'" data-fi="'+i+'" data-fk="'+k+'" value="'+esc(f[k])+'" placeholder="'+esc(ph||'')+'" aria-label="'+esc((f.name||'Feature')+' '+lbl)+'">'}
+        return '<div class="fedit"><div class="frow">'+fi('name','','Name','name')+'<button class="ghost" data-delf="'+p.id+'" data-fi="'+i+'">Remove</button></div>'+
+          '<div class="frow"><span class="lbl">Recharge</span>'+fi('recharge','n','5-6','recharge')+'<span class="lbl">Uses</span>'+fi('uses','n','—','uses')+
+          '<select id="fper-'+i+'-'+p.id+'" data-id="'+p.id+'" data-fi="'+i+'" data-fk="per" aria-label="'+esc(f.name)+' recharges on"><option value="short"'+(f.per!=='long'?' selected':'')+'>per short rest</option><option value="long"'+(f.per==='long'?' selected':'')+'>per long rest</option></select></div>'+
+          '<textarea id="ftext-'+i+'-'+p.id+'" data-id="'+p.id+'" data-fi="'+i+'" data-fk="text" aria-label="'+esc(f.name)+' text">'+esc(f.text)+'</textarea></div>';
+      }).join('')+'<button data-addf="'+p.id+'">Add action or trait</button></div>';
+    var col3='<div class="dcol"><h3>Dragon-Rider Bond</h3><label class="frow"><span class="lbl">Bond level</span><select id="dbond-'+p.id+'" data-id="'+p.id+'" data-dk="bond">'+[1,2,3,4,5,6,7,8,9,10].map(function(l){return '<option'+(l===bl?' selected':'')+'>'+l+'</option>'}).join('')+'</select></label>'+
+      (tk?'<div><span class="lbl">Tactics known ('+d.tactics.length+' of '+tk+')</span><div class="conds" style="max-width:none">'+TACTICS.map(function(t){
+          var on=d.tactics.indexOf(t[0])>=0, dis=!on&&d.tactics.length>=tk;
+          return '<button class="chip good'+(on?' on':'')+'" data-tac="'+p.id+'" data-t="'+t[0]+'" aria-pressed="'+on+'"'+(dis?' disabled':'')+'>'+esc(t[1])+'</button>'}).join('')+'</div></div>'
+        :'<div class="minor">Tandem Tactics unlock at bond level 4.</div>')+
+      '<div class="stack"><span class="lbl">Aspects and bleedover picks</span><textarea id="dasp-'+p.id+'" data-id="'+p.id+'" data-dk="aspects" placeholder="e.g. Bleedover: Perception. Rider Aspect: Alert.">'+esc(d.aspects)+'</textarea></div></div>';
+    return col1+col2+col3;
+  }
+
+  // ---------- Initiative tracker: riders, their dragons and the DM's enemies; rounds, turns, held turns, timed effects ----------
+  // Kept in play.init so it saves online with the rest of the sheet: {list, fx, round, turn, cid, call, notes}.
+  // Entries: {id:'pc-<rider>', pc} for a rider, {id:'dr-<rider>', dr} for their dragon, {id:'dm-…', name, s:{ac,init}, hp, hpMax} for enemies.
+  // list stays sorted: highest initiative first, ties by tb (set from the initiative modifier, or by moving someone).
+  // A timed effect counts down when its anchor's turn starts (the turn it was added on), so it ends just before
+  // that turn the right number of rounds later, as in the rules.
+  var VIEWKEY='arcanum-riders-view', view='party', confirmNewFight=false, fxForm={unit:'1'}, lastRoundKey=null, adding=false, addForm={count:'1',roll:true};
+  try{if(localStorage.getItem(VIEWKEY)==='init')view='init'}catch(e){}
+  function entry(I,id){return I.list.find(function(e){return e.id===id})||null}
+  function ini(){
+    var I=play.init;
+    if(!I||!Array.isArray(I.list))I=play.init={list:[],fx:[],round:0,turn:'',cid:''};
+    if(!Array.isArray(I.fx))I.fx=[];
+    var ids=state.party.map(function(p){return p.id});
+    I.list=I.list.filter(function(e){var r=e.pc||e.dr;return !r||ids.indexOf(r)>=0});
+    state.party.forEach(function(p){
+      if(!entry(I,'pc-'+p.id))I.list.push({id:'pc-'+p.id,pc:p.id,init:'',tb:0});
+      if(!entry(I,'dr-'+p.id))I.list.push({id:'dr-'+p.id,dr:p.id,init:'',tb:0});
+    });
+    return I;
+  }
+  function hero(e){var r=e&&(e.pc||e.dr);return r?byId(r)||null:null}
+  function eName(e){var p=hero(e);return p?(e.dr?dName(p):p.name):(e.name||'Enemy')}
+  function critOf(e){var p=hero(e);return p?(e.dr?did(p):p.id):''}
+  function entryOf(cid){return /-dragon$/.test(cid)?'dr-'+cid.slice(0,-7):'pc-'+cid}
+  function initMod(e){
+    var p=hero(e);
+    if(!p){var mm=e.s&&String(e.s.init||'').match(/[+−-]?\d+/);return mm?+mm[0].replace('−','-'):null}
+    if(e.dr){var ld=liveDragon(p);return ld&&ld.init!=null?+ld.init:mod(p.dragon.dex)}
+    return stat(p,'init');
+  }
+  function rolled(e){return e.init!==''&&e.init!=null&&!isNaN(+e.init)}
+  function inTurn(e){return rolled(e)&&!e.held}
+  function sortInit(I){
+    var pos={};I.list.forEach(function(e,i){pos[e.id]=i});
+    I.list.sort(function(a,b){
+      var ra=rolled(a),rb=rolled(b); if(ra!==rb) return ra?-1:1; if(!ra) return pos[a.id]-pos[b.id];
+      return (+b.init-+a.init)||((+b.tb||0)-(+a.tb||0))||(pos[a.id]-pos[b.id]);
+    });
+  }
+  // Put e just before (or after) t in the order: e takes t's initiative, as with a readied action or a swap.
+  function placeBy(I,e,t,after){
+    var rest=I.list.filter(function(x){return x!==e&&rolled(x)});
+    // give tied entries distinct tie-breaks first, so there is room between them
+    for(var a=0;a<rest.length;){var b=a;while(b+1<rest.length&&+rest[b+1].init===+rest[a].init)b++;
+      for(var j=a;j<b;j++)if(!((+rest[j].tb||0)>(+rest[j+1].tb||0))){for(var k=a;k<=b;k++)rest[k].tb=b-k;break}
+      a=b+1;}
+    var i=rest.indexOf(t), nb=rest[after?i+1:i-1];
+    e.init=t.init; var tb=+t.tb||0;
+    e.tb=nb&&+nb.init===+t.init?(tb+(+nb.tb||0))/2:tb+(after?-1:1);
+    sortInit(I);
+  }
+  // The next (or previous) entry whose turn it can be, and whether that passes the top of the round.
+  function peek(I,dir){
+    var L=I.list, idx=L.findIndex(function(e){return e.id===I.turn}), wrap=false;
+    if(idx<0&&dir<0) return null;
+    for(var k=0;k<L.length;k++){
+      idx+=dir;
+      if(idx>=L.length){idx=0;wrap=true}else if(idx<0){idx=L.length-1;wrap=true}
+      if(inTurn(L[idx])) return {e:L[idx],wrap:wrap};
+    }
+    return null;
+  }
+  function anchored(I,f){var a=f.anchor&&entry(I,f.anchor);return !!(a&&inTurn(a))}
+  // f.tr is the round it last counted down in, so a timer never counts twice in one round (e.g. after a held turn).
+  function fwd(I,f){if(f.tr===I.round)return;f.el=(f.el||0)+1;f.tr=I.round}
+  function bwd(I,f){if(f.tr!==I.round)return;f.el=Math.max(0,(f.el||0)-1);f.tr=I.round-1}
+  function nextTurn(I){
+    var nx=peek(I,1); if(!nx) return;
+    I.notes={};
+    if(nx.wrap){I.round++;I.fx.forEach(function(f){if(!anchored(I,f))fwd(I,f)})}
+    I.turn=nx.e.id;
+    if(nx.e.started!==I.round){nx.e.started=I.round;I.fx.forEach(function(f){if(f.anchor===nx.e.id&&anchored(I,f))fwd(I,f)});upkeep(I,nx.e)}
+  }
+  function prevTurn(I){
+    var c=entry(I,I.turn), pv=peek(I,-1); if(!pv||(pv.wrap&&I.round<=1)) return;
+    I.notes={};
+    if(c&&c.started===I.round){I.fx.forEach(function(f){if(f.anchor===c.id&&anchored(I,f))bwd(I,f)});c.started=I.round-1}
+    if(pv.wrap){I.fx.forEach(function(f){if(!anchored(I,f))bwd(I,f)});I.round--}
+    I.turn=pv.e.id;
+  }
+  function ended(f){return f.total!=null&&(f.el||0)>=f.total}
+  // A timer named after a condition (Stunned, Restrained…) puts it on whoever the timer is on, and takes it off again
+  // when the timer ends or is removed. f.applied lists the creatures it was put on; f.off marks one already taken off.
+  function fxCond(f){return f.cond||condIdFor(f.name)}
+  function fxTargets(I,f){
+    if(f.who==='party')return [].concat.apply([],state.party.map(function(p){return [p.id,did(p)]}));
+    var e=f.who&&entry(I,f.who);return e&&hero(e)?[critOf(e)]:[];
+  }
+  function linkFx(I,f,on){
+    var c=fxCond(f); if(!c) return;
+    var want=on?fxTargets(I,f):[], had=f.applied||[];
+    had.filter(function(h){return want.indexOf(h)<0}).forEach(function(h){setCondFor(h,c,false)});
+    want.filter(function(h){return had.indexOf(h)<0}).forEach(function(h){setCondFor(h,c,true)});
+    f.applied=want;
+  }
+  function critName(cid){var c=crit(cid);return c?c.name:cid}
+  function note(I,eid,txt){var L=(I.notes||(I.notes={}))[eid]||(I.notes[eid]=[]);if(L.indexOf(txt)<0)L.push(txt)}
+  function checkEnds(I){
+    I.fx.forEach(function(f){
+      var done=ended(f);
+      if(done&&!f.off){
+        f.off=true; var hs=(f.applied&&f.applied.length?f.applied:fxTargets(I,f)).slice();
+        linkFx(I,f,false); hs.forEach(function(h){note(I,entryOf(h),f.name+' ended')});
+      } else if(!done&&f.off){f.off=false;linkFx(I,f,true)}
+    });
+  }
+  // The DM took a condition off by hand: drop that creature from any timer that put it there.
+  function dropCondTimers(cid,c){
+    var I=ini();
+    I.fx.forEach(function(f){if(fxCond(f)===c&&f.applied)f.applied=f.applied.filter(function(x){return x!==cid})});
+    I.fx=I.fx.filter(function(f){return !(fxCond(f)===c&&f.who===entryOf(cid))});
+    savePlay();
+  }
+  // Start of a turn: a word on timers in their last round.
+  function upkeep(I,e){
+    var cid=critOf(e);
+    I.fx.forEach(function(f){if(f.total!=null&&!ended(f)&&f.total-(f.el||0)===1&&(f.who===e.id||(cid&&fxTargets(I,f).indexOf(cid)>=0)))note(I,e.id,f.name+': last round')});
+  }
+  function roundsTxt(r){return r+' round'+(r===1?'':'s')+(r>=10?' (≈'+(Math.round(r*6/60*10)/10)+' min)':'')}
+  // Tell the riders' sheets the round and whose turn it is (js/turn.js). turn, next, held and callFor are entry ids, only for
+  // riders reading a live sheet; turnName is what players see, and enemies show as "Enemy" so their names stay hidden.
+  function sheetId(e){var p=e&&hero(e);return p&&hasSheet(p)&&!p.paper?e.id:''}
+  function shownName(e){return e?(hero(e)?eName(e):'Enemy'):''}
+  function callFor(I){return I.call&&!I.round?I.list.filter(function(e){return hero(e)&&!rolled(e)}).map(sheetId).filter(Boolean):[]}
+  function postRound(){
+    var I=ini(), c=I.round?entry(I,I.turn):null, nx=I.round?peek(I,1):null;
+    var doc={cid:I.cid||'',round:I.round||0,active:!!I.round,turn:sheetId(c),turnName:shownName(c),
+      next:nx&&nx.e!==c?sheetId(nx.e):'',nextName:nx&&nx.e!==c?shownName(nx.e):'',
+      held:I.round?I.list.filter(function(e){return e.held}).map(sheetId).filter(Boolean):[],
+      notes:c&&sheetId(c)&&I.notes&&I.notes[c.id]?I.notes[c.id]:[],
+      call:I.call&&!I.round?I.call.id:'', callFor:callFor(I)};
+    var key=JSON.stringify(doc);
+    if(!cloudDb||key===lastRoundKey) return; lastRoundKey=key;
+    doc.at=new Date().toISOString();
+    cloudDb.doc('party/round').set(doc).catch(function(){lastRoundKey=null});
+  }
+  function holdTurn(I,id){var e=entry(I,id);if(!e)return;nextTurn(I);e.held=true}
+  function actNow(I,id){var e=entry(I,id),c=entry(I,I.turn);if(!e)return;e.held=false;if(c&&c!==e)placeBy(I,e,c,false);e.started=I.round;I.turn=e.id}
+  // A player's Hold, End turn, Act now or initiative roll from their own sheet. It only counts for the turn it was sent on,
+  // so a double tap or a late message never skips anyone.
+  var replySeen={}, pageOpened=new Date().toISOString();
+  function takeReply(id,d){
+    if(!d||!d.at||d.at<=(replySeen[id]||pageOpened))return; replySeen[id]=d.at;
+    var I=ini(), p=byId(id); if(!p||p.paper)return;
+    if(d.act==='init'){
+      if(!I.call||d.call!==I.call.id||I.round)return;
+      var got=[];
+      Object.keys(d.values||{}).forEach(function(k){var e=entry(I,k),v=parseInt(d.values[k],10);if(!e||hero(e)!==p||isNaN(v))return;setInit(e.id,v);got.push(eName(e)+' '+v)});
+      if(got.length){statusMsg='Initiative: '+got.join(', ')+'.'+(callFor(I).length?'':' Everyone’s in.');postRound();render()}
+      return;
+    }
+    if(!I.round||d.cid!==I.cid||+d.round!==I.round)return;
+    var e=entry(I,d.entry); if(!e||hero(e)!==p)return;
+    if((d.act==='end'||d.act==='hold')&&I.turn===e.id){
+      initGo(function(I){if(d.act==='end')nextTurn(I);else holdTurn(I,e.id)});
+      statusMsg=eName(e)+(d.act==='end'?' ended their turn.':' is holding their turn.');render();
+    } else if(d.act==='act'&&e.held){
+      initGo(function(I){actNow(I,e.id)});statusMsg=eName(e)+' acts now.';render();
+    }
+  }
+  function fxCard(I,f){
+    var who=f.who&&entry(I,f.who), a=f.anchor&&entry(I,f.anchor), done=ended(f), left=f.total!=null?Math.max(0,f.total-(f.el||0)):null, status, endTxt='';
+    if(f.total==null)status='Round '+((f.el||0)+1);
+    else if(done)status='Ended';
+    else status=roundsTxt(left)+' left';
+    if(!done&&left!=null&&I.round&&a&&inTurn(a))endTxt='Ends at the start of '+eName(a)+'’s turn, round '+(I.round+left-(a.started===I.round?0:1));
+    var pct=f.total?Math.round(left/f.total*100):100;
+    var onTxt=f.who==='party'?'On the whole party · ':who?'On '+esc(eName(who))+' · ':'', lk=fxCond(f);
+    var lkTxt=lk&&!done&&f.applied&&f.applied.length?'<br>'+esc(condDef(lk)[1])+' is on '+(f.who==='party'?'everyone':esc(f.applied.map(critName).join(', ')))+' until this ends.':'';
+    return '<div class="fx'+(done?' ended':'')+'"><div class="t"><b>'+esc(f.name)+'</b><span class="left">'+esc(status)+'</span></div>'+
+      '<div class="minor" style="white-space:normal">'+onTxt+(f.total!=null?roundsTxt(f.total)+' total':'until ended')+(endTxt?'<br>'+esc(endTxt):'')+lkTxt+'</div>'+
+      (f.total&&!done?'<div class="hpbar"><i style="width:'+pct+'%"></i></div>':'')+
+      '<div class="b">'+(done?'':'<button data-fxadj="'+f.id+'" data-d="-1" title="One round less" aria-label="'+esc(f.name)+': one round less">−1 rd</button><button data-fxadj="'+f.id+'" data-d="1" title="One round more" aria-label="'+esc(f.name)+': one round more">+1 rd</button>')+
+      '<button class="ghost" data-fxdel="'+f.id+'">'+(done?'Dismiss':'Remove')+'</button></div></div>';
+  }
+  function initRow(I,e,c,active){
+    var isCur=active&&c===e, r=rolled(e), p=hero(e), m=initMod(e), sub=[];
+    var rl=I.list.filter(rolled), ri=rl.indexOf(e);
+    if(!p){
+      sub.push('<span class="tag dm">Enemy</span>');
+      if(e.hpMax!=null&&e.hp<=0)sub.push('<span class="tag down">Down</span>');
+      if(e.s&&e.s.ac)sub.push('<span class="st">AC <b>'+esc(e.s.ac)+'</b></span>');
+    }
+    if(e.held)sub.push('<span class="tag hold">Holding</span>');
+    if(m!=null)sub.push('<span class="st">Init <b>'+sg(m)+'</b></span>');
+    if(p&&callFor(I).indexOf(e.id)>=0)sub.push('<span class="tag hold">Rolling on their sheet…</span>');
+    if(p){
+      var cid=critOf(e), cr=crit(cid), mx=effMax(cr), ch=curHp(cr);
+      if(e.dr)sub.push('<span class="tag drg">'+esc(p.name)+'’s dragon</span>');
+      sub.push('<span class="st">AC <b>'+(e.dr?dAC(p):(stat(p,'ac')==null?'—':stat(p,'ac')))+'</b></span>');
+      if(mx!=null)sub.push('<span class="st">HP <b>'+ch+'</b> / '+mx+'</span>'+(ch===0?'<span class="tag down">Down</span>':''));
+      if(cr.live)sub.push('<span class="live">●</span>');
+      var on=condOn(cid);CONDS.filter(function(x){return on[x[0]]}).forEach(function(x){sub.push('<span class="chip on">'+esc(x[1])+'</span>')});
+      if(exh(cid))sub.push('<span class="chip on">Exhaustion '+exh(cid)+'</span>');
+      if(e.dr&&isCur)sub.push('<span class="minor">Dodges unless '+esc(p.name)+' commands it (bonus action)</span>');
+    }
+    if(!r)sub.push('<span>'+(active?'Not in this fight':'No roll yet')+'</span>');
+    I.fx.filter(function(f){return f.who===e.id||(f.who==='party'&&p)}).forEach(function(f){var lf=f.total!=null?Math.max(0,f.total-(f.el||0)):null;
+      sub.push('<span class="tag fx'+(ended(f)?' ended':'')+'">'+esc(f.name)+(ended(f)?' ended':lf!=null?' '+lf:'')+'</span>')});
+    var act='';
+    if(r)act+='<button class="step" data-iup="'+e.id+'"'+(ri<=0?' disabled':'')+' aria-label="Move '+esc(eName(e))+' up" title="Move up">↑</button><button class="step" data-idown="'+e.id+'"'+(ri>=rl.length-1?' disabled':'')+' aria-label="Move '+esc(eName(e))+' down" title="Move down">↓</button>';
+    if(isCur&&I.list.filter(inTurn).length>1)act+='<button data-ihold="'+e.id+'" title="Ready an action or wait: step out of the order until they act">Hold turn</button>';
+    if(e.held)act+=(active?'<button class="primary" data-iact="'+e.id+'" title="Acts now, before '+esc(c?eName(c):'')+', and keeps this spot from now on">Act now</button>':'')+'<button class="ghost" data-iunhold="'+e.id+'">Back in place</button>';
+    if(!p)act+='<button class="ghost" data-idel="'+e.id+'" aria-label="Remove '+esc(eName(e))+'">Remove</button>';
+    var mhp='';
+    if(!p&&e.hpMax!=null){
+      var pct=e.hpMax>0?Math.max(0,Math.min(100,Math.round(e.hp/e.hpMax*100))):0;
+      mhp='<div class="mhp"><label class="minor" for="hp-'+e.id+'">HP</label><input class="n" id="hp-'+e.id+'" data-ihpcur="'+e.id+'" inputmode="numeric" value="'+e.hp+'"><span class="minor">/ '+e.hpMax+'</span>'+
+        '<span class="mhp-g"><input class="n" data-idmg="'+e.id+'" inputmode="numeric" placeholder="±" aria-label="'+esc(eName(e))+': amount of damage or healing" title="Type an amount, then Enter (or Hurt) for damage">'+
+        '<button class="hurt" data-ihurt="'+e.id+'">Hurt</button><button class="heal" data-iheal="'+e.id+'">Heal</button></span>'+
+        '<div class="hpbar"><i class="'+(pct<=25?'low':'')+'" style="width:'+pct+'%"></i></div></div>';
+    }
+    return '<li class="ini-row'+(e.dr?' drag':'')+(isCur?' cur':'')+(e.held?' held':'')+(r?'':' out')+(!p&&e.hpMax!=null&&e.hp<=0?' down':'')+'"'+(e.dr?' style="--gem:'+esc(p.dragon.color||'')+'"':'')+(isCur?' aria-current="true"':'')+'>'+
+      '<span class="ini-mark" aria-hidden="true">'+(isCur?'▶':'')+'</span>'+
+      '<input class="ini-in" data-ini="'+e.id+'" inputmode="numeric" value="'+esc(r?e.init:'')+'" placeholder="—" aria-label="'+esc(eName(e))+' initiative">'+
+      '<div class="ini-who">'+(p?'<span class="name">'+esc(eName(e))+'</span>':
+        '<div class="dmin"><input class="ini-name" data-iname="'+e.id+'" value="'+esc(e.name)+'" aria-label="Enemy name"><input data-inote="'+e.id+'" value="'+esc(e.note||'')+'" placeholder="Notes: resistances, tactics…" aria-label="'+esc(e.name)+' notes"></div>')+
+      '<div class="ini-sub">'+sub.join('')+'</div>'+mhp+'</div>'+
+      '<div class="ini-act">'+act+'</div></li>';
+  }
+  function addView(){
+    var f=addForm;
+    return '<section class="pick" aria-labelledby="ad-h"><div class="pk-head"><h2 id="ad-h">Add enemies</h2><button class="ghost" id="ad-close">Close</button></div>'+
+      '<div class="pk-row"><label class="stack" style="flex:2;min-width:10em"><span class="lbl">Name</span><input id="ad-name" value="'+esc(f.name||'')+'" placeholder="Goblin" autocomplete="off"></label>'+
+      '<label class="stack"><span class="lbl">How many</span><input class="n" id="ad-count" inputmode="numeric" value="'+esc(f.count||'1')+'"></label>'+
+      '<label class="stack"><span class="lbl">HP each</span><input class="n" id="ad-hp" value="'+esc(f.hp||'')+'" placeholder="7 or 2d6" style="width:6em"></label>'+
+      '<label class="stack"><span class="lbl">AC</span><input class="n" id="ad-ac" inputmode="numeric" value="'+esc(f.ac||'')+'" placeholder="—"></label>'+
+      '<label class="stack"><span class="lbl">Init bonus</span><input class="n" id="ad-init" inputmode="numeric" value="'+esc(f.init||'')+'" placeholder="+0"></label></div>'+
+      '<div class="pk-row"><label class="minor pk-roll"><input type="checkbox" id="ad-roll"'+(f.roll?' checked':'')+'> Roll initiative for them</label><button class="primary" id="ad-go">Add to the fight</button></div>'+
+      '<p class="minor" style="margin:0">HP can be a number or dice (2d6+2), rolled for each one. Leave HP empty to skip tracking it.</p></section>';
+  }
+  // "7" → 7 · "2d6+2" → rolled each time
+  function hpRoll(s){
+    var t=String(s||'').replace(/\s+/g,'').toLowerCase(), m=t.match(/^(\d*)d(\d+)([+-]\d+)?$/);
+    if(m){var k=+(m[1]||1),d=+m[2],tot=+(m[3]||0);for(var i=0;i<Math.min(k,100);i++)tot+=1+Math.floor(Math.random()*d);return Math.max(1,tot)}
+    var v=parseInt(t,10);return isNaN(v)?null:v;
+  }
+  function addEnemies(){
+    var I=ini(), f=addForm, base=String(f.name||'').trim()||'Enemy', k=Math.max(1,Math.min(30,parseInt(f.count,10)||1)), rolls=[];
+    var same=I.list.filter(function(e){return !hero(e)&&(e.base||e.name)===base}).length, many=k+same>1;
+    if(same===1){var lone=I.list.find(function(e){return !hero(e)&&e.name===base});if(lone){lone.name=base+' 1';lone.base=base}}
+    for(var i=0;i<k;i++){
+      var hp=hpRoll(f.hp), id='dm-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      var e={id:id,name:many?base+' '+(same+i+1):base,base:base,init:'',tb:0,note:'',s:{ac:String(f.ac||'').trim(),init:String(f.init||'').trim()}};
+      if(hp!=null){e.hp=hp;e.hpMax=hp}
+      var md=initMod(e); e.tb=md==null?0:md;
+      if(f.roll){var d=1+Math.floor(Math.random()*20);e.init=d+(md||0);rolls.push(e.name+' '+e.init)}
+      I.list.push(e);
+    }
+    sortInit(I);savePlay();postRound();
+    statusMsg='Added '+k+(k===1?' enemy':' enemies')+(rolls.length?'. Initiative: '+rolls.join(', '):'. Type their initiative rolls.');
+    addForm={count:'1',roll:f.roll};
+  }
+  function initView(){
+    var I=ini();
+    var active=!!I.round, c=active?entry(I,I.turn):null, nx=active?peek(I,1):null, seq=I.list.filter(inTurn);
+    var done=I.fx.filter(ended);
+    var bar='<div class="ini-bar"><div class="ini-round"><span class="lbl">Round</span><span class="rn">'+(active?I.round:'—')+'</span></div>'+
+      '<div class="ini-now" role="status">'+(active&&c?'<span class="lbl">Now acting</span><b>'+esc(eName(c))+'</b>'+(nx&&nx.e!==c?'<span class="minor">Next: '+esc(eName(nx.e))+(nx.wrap?' (round '+(I.round+1)+')':'')+'</span>':''):
+        '<span class="minor" style="white-space:normal">Type each initiative roll (it sorts itself), add the enemies, then Start combat. Leave a box empty to sit someone out; dragons roll their own initiative.</span>')+'</div>'+
+      '<div class="ini-ctl">'+(active?'<button id="ini-prev" title="Undo the last Next turn">◂ Back</button><button class="primary" id="ini-next">Next turn ▸</button><button id="ini-end">End combat</button>':
+        '<button class="primary" id="ini-start"'+(seq.length?'':' disabled')+'>Start combat</button>')+'</div></div>';
+    var alert=done.length?'<div class="ini-alert" role="alert">⏱ Ended: '+done.map(function(f){var w=f.who&&entry(I,f.who);return esc(f.name)+(w?' ('+esc(eName(w))+')':'')}).join(', ')+'<button data-fxclear="1">Dismiss all</button></div>':'';
+    var asking=callFor(I), anyLive=state.party.some(function(p){return hasSheet(p)&&!p.paper});
+    var tools='<div class="ini-tools">'+(active||!anyLive?'':I.call?'<button id="ini-call-stop" title="Stop asking; type the rest yourself">Stop asking'+(asking.length?' ('+asking.length+' to go)':'')+'</button>':
+        '<button id="ini-call" title="Each rider on a live sheet without a roll gets asked to roll on their own sheet, for them and their dragon">Ask players to roll</button>')+
+      '<button class="primary" id="ini-add" aria-expanded="'+adding+'">Add enemies</button><button id="ini-sort" title="Re-sort by initiative">Sort</button>'+
+      (confirmNewFight?'<button class="primary" id="ini-new-yes">Yes, clear for a new fight</button><button id="ini-new-no">Cancel</button>':'<button id="ini-new" title="Clears every roll and the enemies; timers keep running">New fight</button>')+'</div>';
+    var list='<ol class="ini-list" aria-label="Turn order">'+I.list.map(function(e){return initRow(I,e,c,active)}).join('')+'</ol>';
+    var who='<option value="">— nobody in particular —</option><option value="party"'+(fxForm.who==='party'?' selected':'')+'>Whole party</option>'+I.list.map(function(e){var sel=fxForm.who!=null?fxForm.who===e.id:(c===e);return '<option value="'+e.id+'"'+(sel?' selected':'')+'>'+esc(eName(e))+'</option>'}).join('');
+    var units=[['1','rounds'],['10','minutes'],['600','hours'],['0','until ended']];
+    var side='<section class="ini-side" aria-labelledby="fx-title"><h2 id="fx-title">Timed effects</h2>'+
+      '<div class="fx-form"><div class="r"><input id="fx-name" list="fx-names" value="'+esc(fxForm.name||'')+'" placeholder="Spell or effect (e.g. Bless, Restrained)" aria-label="Effect name" autocomplete="off">'+
+        '<datalist id="fx-names">'+CONDS.map(function(x){return '<option value="'+x[1]+'">'}).join('')+'</datalist></div>'+
+      '<div class="r"><label class="minor" for="fx-who">On</label><select id="fx-who">'+who+'</select></div>'+
+      '<div class="r"><input class="n" id="fx-dur" inputmode="numeric" value="'+esc(fxForm.dur||'')+'" placeholder="#" aria-label="Duration"'+(fxForm.unit==='0'?' disabled':'')+'>'+
+        '<select id="fx-unit" aria-label="Duration unit">'+units.map(function(u){return '<option value="'+u[0]+'"'+(fxForm.unit===u[0]?' selected':'')+'>'+u[1]+'</option>'}).join('')+'</select>'+
+        '<button class="primary" id="fx-add">Add timer</button></div>'+
+      '<p class="minor" style="white-space:normal;margin:0">Add it on the caster’s turn: it counts down at the start of that turn each round and ends just before it. A timer named after a condition puts it on whoever it’s on and takes it off when it ends.</p></div>'+
+      (I.fx.length?I.fx.map(function(f){return fxCard(I,f)}).join(''):'<p class="minor" style="margin:0">No timers running.</p>')+
+      (!active&&I.fx.some(function(f){return !ended(f)})?'<div class="ini-tools"><button id="fx-min" title="Outside combat: every timer loses 10 rounds">Pass 1 minute</button><button id="fx-10min">Pass 10 minutes</button></div>':'')+
+      '</section>';
+    return '<div class="ini"><div class="ini-main">'+bar+alert+tools+(adding?addView():'')+list+'</div>'+side+'</div>';
+  }
+  function setInit(id,v){
+    var I=ini(), e=entry(I,id); if(!e) return;
+    var x=String(v==null?'':v).trim().replace('−','-'), num=x===''?'':parseInt(x,10);
+    if(num!==''&&isNaN(num))num='';
+    if(String(num)===String(e.init===undefined?'':e.init)) return;
+    e.init=num; var m=initMod(e); e.tb=m==null?0:m;
+    if(num==='')e.held=false;
+    sortInit(I); savePlay();
+  }
+  function initGo(fn){
+    var I=ini(), was=I.turn;fn(I);checkEnds(I);
+    var c=I.round&&I.turn!==was?entry(I,I.turn):null, ns=c&&I.notes&&I.notes[c.id];
+    if(ns&&ns.length)statusMsg=eName(c)+'’s turn: '+ns.join(' · ');
+    savePlay();postRound();render();
+  }
+  // Damage (dir −1) or healing (+1) on an enemy from its ± box; a typed "-12" counts as damage either way.
+  function enemyHp(id,dir){
+    var I=ini(), e=entry(I,id), box=document.querySelector('[data-idmg="'+id+'"]'); if(!e||e.hpMax==null||!box) return;
+    var raw=String(box.value).trim().replace('−','-'), v=parseInt(raw,10);
+    if(isNaN(v)||!v){statusMsg='Type an amount in the ± box first.';render();return}
+    if(raw[0]==='-'||raw[0]==='+'){dir=v<0?-1:1;v=Math.abs(v)}
+    var was=e.hp; e.hp=dir<0?e.hp-v:Math.min(e.hpMax,e.hp+v);
+    statusMsg=e.name+(dir<0?' takes '+v:' heals '+(e.hp-was))+' → '+e.hp+' / '+e.hpMax+' HP'+(e.hp<=0&&was>0?'. Down!':'');
+    savePlay();render();
+  }
+
+  // ---------- Page ----------
+  function render(){
+    postRound();
+    var root=document.getElementById('root'), tools, I=ini(), ir=I.round, onInit=view==='init'&&!editing;
+    if(editing){
+      tools=(ask==='restore'?'<button id="restore-yes">Yes, restore originals</button><button id="ask-no">Keep my edits</button>':'<button id="restore-btn">Restore original stats</button>')+
+        '<button id="add-btn">Add rider</button><button id="cancel-btn">Cancel</button><button class="primary" id="save-btn">Save changes</button>';
+    } else {
+      var anyClosed=state.party.some(function(p){return !play.open[p.id]});
+      tools=(ask==='long'?'<button class="primary" id="long-yes">Confirm long rest</button><button id="ask-no">Cancel</button>':'<button id="short-btn">Short rest</button><button id="long-btn">Long rest</button>')+allPaperBtn()+
+        (onInit?'':'<button id="fold-btn">'+(anyClosed?'Show all dragons':'Hide all dragons')+'</button>')+'<button id="export-btn">Export backup</button><button id="import-btn">Import backup</button><button class="primary" id="edit-btn">Edit sheet</button>';
+    }
+    root.innerHTML='<header><div><h1>Dragon Riders of Arcanum</h1><p class="sub">The Homies · Isle of Droojh · D&amp;D 5e · updated '+esc(state.updated)+'</p></div>'+
+      '<div class="tools">'+(statusMsg?'<span class="status" role="status">'+esc(statusMsg)+'</span>':'')+tools+'</div></header>'+
+      '<nav class="vtabs" role="tablist" aria-label="Sheet sections"><button role="tab" data-view="party" aria-selected="'+!onInit+'">Party</button><button role="tab" data-view="init" aria-selected="'+onInit+'">Initiative'+(ir?' · round '+ir:'')+'</button></nav>'+
+      (onInit?initView():
+      '<p class="notice">Riders with their own sheet on this site (● Live sheet) update here by themselves: HP, AC, saves, speed, conditions and their dragon’s HP. Damage, conditions and long rests you set here go to their sheet. Switch a rider to Paper to track them from the stats typed in here instead. Open a dragon row for its stat block, Dragon-Rider Bond and Breya’s wards. Conditions and exhaustion use the 2014 Player’s Handbook rules.</p>'+
+      summary()+
+      '<div class="wrap"><table><thead><tr><th>Rider</th><th>Level / class</th><th>AC</th><th>Hit points</th><th>Speed</th><th>Saving throws</th><th>Init · senses</th><th>Notes</th></tr></thead><tbody>'+
+      state.party.map(function(p){return riderRow(p)+dragonRow(p)}).join('')+'</tbody></table></div>')+
+      '<footer><span>'+(cloud?'Everything saves online, so this sheet is the same on every device you open it on. Export backup keeps an extra copy.':'Everything saves in this browser on this device. Use Export backup to keep a copy or move the sheet to another device, then Import backup there.')+'</span><span>Dragon-Rider Bond by ozu95supein. Dragonwarden is a homebrew artificer subclass.</span></footer>';
+  }
+  // Re-render without yanking focus out of a box the DM is typing in.
+  var pendingRender=false;
+  function softRender(){var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&document.getElementById('root').contains(a)){pendingRender=true;return}render()}
+  document.addEventListener('focusout',function(){if(pendingRender){pendingRender=false;setTimeout(softRender,0)}});
+  window.addEventListener('storage',function(e){if(e.key&&e.key.indexOf('drsheet-link:')===0)softRender()});
+
+  function slug(s){return (String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'rider')+'-'+Math.random().toString(36).slice(2,6)}
+
+  function shortRest(){
+    play.tandem={};
+    state.party.forEach(function(p){p.dragon.features.forEach(function(f,i){var k=did(p)+'#'+i;if(f.per!=='long')delete play.used[k];delete play.spent[k];})});
+    rolls={};
+  }
+  function longRest(){
+    shortRest(); play.used={}; play.temp={};
+    var all=[];state.party.forEach(function(p){all.push(p.id,did(p))});
+    all.forEach(function(id){
+      var ds=play.death[id];if(ds&&ds.f>=3)return;
+      delete play.hp[id];delete play.death[id];
+      if(play.cond[id])play.cond[id].unconscious=false;
+      if(play.exh[id])play.exh[id]=Math.max(0,play.exh[id]-1);
+    });
+    logs={};
+  }
+  // Riders on live sheets rest on their own sheets: party/rest says so, and each sheet is opened out of sight in turn
+  // so the rest lands even if nobody has it open.
+  function liveIds(){return state.party.filter(function(p){return hasSheet(p)&&!p.paper}).map(function(p){return p.id})}
+  function visitSheets(ids,ok,after){
+    var queue=ids.slice();
+    (function next(){
+      var id=queue.shift();if(!id)return;
+      var f=document.createElement('iframe');f.src=SHEET_PAGES[id];f.title='';f.tabIndex=-1;f.setAttribute('aria-hidden','true');
+      f.style.cssText='position:fixed;left:-10000px;top:0;width:1024px;height:768px;border:0;visibility:hidden';
+      document.body.appendChild(f);
+      var started=Date.now();
+      (function wait(){
+        if(ok(id)){if(after)after(id,true);setTimeout(function(){f.remove();next()},1500);return}
+        if(Date.now()-started>30000){if(after)after(id,false);f.remove();next();return}
+        setTimeout(wait,500);
+      })();
+    })();
+  }
+  function restLive(){
+    var ids=liveIds(); if(!ids.length)return;
+    if(!cloudDb){statusMsg+=' Riders on live sheets take their long rest on their own sheets.';return}
+    var at=new Date().toISOString(), done={};
+    function nm(id){var p=byId(id);return p?p.name:id}
+    function upd(){statusMsg='Long rest: '+ids.map(function(id){return nm(id)+(done[id]===true?' ✓':done[id]===false?' (rests when their sheet is next opened)':' …')}).join(', ')+'. Paper riders and dragons restored here.';softRender()}
+    cloudDb.doc('party/rest').set({at:at}).then(function(){
+      upd();
+      visitSheets(ids,function(id){var L=rawLink(id);return !!(L&&L.restAt&&L.restAt>=at)},function(id,ok){done[id]=ok;upd()});
+    },function(){statusMsg='Couldn’t send the long rest to the live sheets. Check the connection and try again.';render()});
+  }
+
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('button'); if(!t||t.disabled) return;
+    var ds=t.dataset, I;
+    if(ds.view){view=ds.view;try{localStorage.setItem(VIEWKEY,view)}catch(err){}confirmNewFight=false;render();var tb=document.querySelector('[data-view="'+view+'"]');if(tb)tb.focus();return}
+    else if(t.id==='edit-btn'){backup=JSON.stringify(state);editing=true;statusMsg='';ask='';render();}
+    else if(t.id==='cancel-btn'){state=JSON.parse(backup);editing=false;dirty=false;ask='';render();}
+    else if(t.id==='restore-btn'){ask='restore';render();}
+    else if(t.id==='long-btn'){ask='long';render();}
+    else if(t.id==='ask-no'){ask='';render();}
+    else if(t.id==='restore-yes'){state=JSON.parse(DEFAULTS);ask='';dirty=true;render();}
+    else if(t.id==='short-btn'){shortRest();savePlay();statusMsg='Short rest: tandem uses, short-rest abilities and breath weapons restored. Spend Hit Dice to heal'+(liveIds().length?'; riders on live sheets do that on their own sheets.':'.');render();}
+    else if(t.id==='long-yes'){longRest();savePlay();ask='';statusMsg='Long rest: HP and abilities restored, temp HP cleared, 1 exhaustion level removed.';restLive();render();}
+    else if(t.id==='fold-btn'){var anyC=state.party.some(function(p){return !play.open[p.id]});state.party.forEach(function(p){play.open[p.id]=anyC});savePlay();render();}
+    else if(t.id==='export-btn'){openExport();}
+    else if(t.id==='import-btn'){openImport();}
+    else if(t.id==='add-btn'){state.party.push({id:slug('rider'),name:'New rider',race:'',classes:'',level:'3',ac:'',hp:'',speed:'30',fly:'',flyNote:'',sstr:'',sdex:'',scon:'',sint:'',swis:'',scha:'',init:'',pp:'',dc:'',defenses:'',notes:'',dragon:blankDragon()});dirty=true;render();}
+    else if(ds.del){state.party=state.party.filter(function(p){return p.id!==ds.del});dirty=true;render();}
+    else if(t.id==='save-btn'){save();}
+    else if(ds.livetog){
+      var lp=byId(ds.livetog);if(!lp)return;
+      var copied=setPaper(lp,!lp.paper);
+      statusMsg=lp.paper?lp.name+' is on paper now'+(copied?', starting from the last numbers their sheet sent':'')+'. Use Edit sheet to change the stats.':lp.name+' reads their own sheet again.';
+      saveState();savePlay();render();var lb=document.querySelector('[data-livetog="'+lp.id+'"]');if(lb)lb.focus();
+    }
+    else if(t.id==='all-paper'||t.id==='all-live'){
+      var toPaper=t.id==='all-paper', who=state.party.filter(function(p){return hasSheet(p)&&!!p.paper!==toPaper});
+      who.forEach(function(p){setPaper(p,toPaper)});
+      statusMsg=who.length?(toPaper?'Everyone is on paper now, starting from the last numbers their sheets sent.':'Everyone with a sheet reads it live again.'):'';
+      saveState();savePlay();render();var ab=document.getElementById(toPaper?'all-live':'all-paper');if(ab)ab.focus();
+    }
+    else if(ds.open){play.open[ds.open]=!play.open[ds.open];savePlay();render();}
+    else if(ds.full){delete play.hp[ds.full];delete play.death[ds.full];delete logs[ds.full];var cf=play.cond[ds.full];if(cf)cf.unconscious=false;savePlay();render();}
+    else if(ds.dmg||ds.heal||ds.tmp){
+      var id=ds.dmg||ds.heal||ds.tmp, c=crit(id), amt=n(document.getElementById('amt-'+id).value);
+      if(c&&amt!==null&&amt>0){
+        if(c.live){var lt=lastType[id]||'untyped';
+          if(sendHp(id,ds.tmp?{amt:amt,temp:true}:ds.heal?{amt:amt,heal:true}:{amt:amt,type:lt}))
+            logs[id]='Sent '+(ds.tmp?amt+' temp HP':ds.heal?amt+' healing':amt+(lt==='untyped'?'':' '+lt)+' damage')+' to '+c.p.name+'’s sheet';
+        } else applyHp(c,amt,!!ds.heal);
+        render();var ab2=document.getElementById('amt-'+id);if(ab2)ab2.focus();
+      }
+    }
+    else if(ds.cond){toggleCond(ds.cond,ds.c);}
+    else if(ds.cdurset){setCondTimer(ds.cdurset);}
+    else if(ds.cdurno){delete condAsk[ds.cdurno];render();}
+    else if(ds.exh){
+      var nx=Math.max(0,Math.min(6,exh(ds.exh)+(+ds.d)));
+      if(liveRider(ds.exh)){if(sendCond(ds.exh,'exh',{v:nx}))statusMsg='Sent exhaustion '+nx+' to '+byId(ds.exh).name+'’s sheet';}
+      else{play.exh[ds.exh]=nx;savePlay();}
+      render();
+    }
+    else if(ds.insp){
+      if(liveRider(ds.insp)){var io=!inspOn(ds.insp);if(sendCond(ds.insp,'insp',{on:io}))statusMsg=(io?'Gave ':'Took ')+'inspiration '+(io?'to ':'from ')+byId(ds.insp).name;}
+      else{play.insp[ds.insp]=!play.insp[ds.insp];savePlay();}
+      render();
+    }
+    else if(ds.pk){
+      var to=+ds.to,tot=+ds.total,k=ds.key;
+      if(ds.pk==='tan')play.tandem[k]=tot-to;
+      else if(ds.pk==='use')play.used[k]=tot-to;
+      else if(ds.pk==='ds-s'||ds.pk==='ds-f'){var d0=play.death[k]||{s:0,f:0};d0[ds.pk==='ds-s'?'s':'f']=to;play.death[k]=d0;}
+      savePlay();render();
+    }
+    else if(ds.spend){play.spent[ds.spend]=true;delete rolls[ds.spend];savePlay();render();}
+    else if(ds.roll){var r=1+Math.floor(Math.random()*6),ok=r>=+ds.min;if(ok)delete play.spent[ds.roll];rolls[ds.roll]='Rolled '+r+(ok?': recharged':': not yet');savePlay();render();}
+    else if(ds.ward){
+      var wo=play.wards[ds.ward]||(play.wards[ds.ward]={});wo[ds.w]=!wo[ds.w];savePlay();render();
+    }
+    else if(ds.aegis){
+      var aid=ds.aegis+'-dragon',lv=+ds.lv,ac=crit(aid);
+      if(ac&&ac.live){if(sendHp(aid,{amt:lv,temp:true}))logs[aid]='Aegis ward: sent '+lv+' temp HP to '+ac.p.name+'’s sheet.';}
+      else{play.temp[aid]=Math.max(play.temp[aid]||0,lv);logs[aid]='Aegis ward: '+lv+' temp HP (temp HP don’t stack; the higher value stays).';savePlay();}
+      render();
+    }
+    else if(ds.tac){
+      var tp=byId(ds.tac), arr=tp.dragon.tactics, ix=arr.indexOf(ds.t);
+      if(ix>=0)arr.splice(ix,1);else arr.push(ds.t);dirty=true;render();
+    }
+    else if(ds.addf){byId(ds.addf).dragon.features.push({name:'New trait',text:''});dirty=true;render();}
+    else if(ds.delf){byId(ds.delf).dragon.features.splice(+ds.fi,1);dirty=true;render();}
+    else if(ds.close){var dl=t.closest('dialog');if(dl)dl.close();}
+    else if(t.id==='copy-json'){copyJson();}
+    else if(t.id==='dl-json'){downloadJson();}
+    else if(t.id==='load-json'){importText(document.getElementById('import-text').value);}
+    // initiative
+    else if(t.id==='ini-call'||t.id==='ini-call-stop')initGo(function(I){if(t.id==='ini-call'){I.call={id:Date.now().toString(36)};statusMsg=callFor(I).length?'Asked the players on live sheets to roll ('+callFor(I).length+' rolls).':'Everyone on a live sheet already has a roll.'}else{delete I.call;statusMsg=''}});
+    else if(t.id==='ini-start')initGo(function(I){delete I.call;sortInit(I);I.list.forEach(function(e){e.held=false;e.started=0});I.fx.forEach(function(f){delete f.tr});I.round=1;I.turn='';I.cid=Date.now().toString(36);nextTurn(I)});
+    else if(t.id==='ini-next')initGo(nextTurn);
+    else if(t.id==='ini-prev')initGo(prevTurn);
+    else if(t.id==='ini-end')initGo(function(I){I.round=0;I.turn='';I.list.forEach(function(e){e.held=false;e.started=0});I.fx.forEach(function(f){f.anchor='';delete f.tr})});
+    else if(t.id==='ini-sort'){I=ini();sortInit(I);savePlay();render();}
+    else if(t.id==='ini-add'){adding=!adding;render();var af=document.getElementById(adding?'ad-name':'ini-add');if(af)af.focus();return}
+    else if(t.id==='ad-close'){adding=false;render();var ib=document.getElementById('ini-add');if(ib)ib.focus();return}
+    else if(t.id==='ad-go'){readAddForm();addEnemies();render();var an=document.getElementById('ad-name');if(an)an.focus();return}
+    else if(ds.ihurt||ds.iheal){enemyHp(ds.ihurt||ds.iheal,ds.ihurt?-1:1);var hb=document.querySelector('[data-idmg="'+(ds.ihurt||ds.iheal)+'"]');if(hb)hb.focus();return}
+    else if(t.id==='ini-new'){confirmNewFight=true;render();}
+    else if(t.id==='ini-new-no'){confirmNewFight=false;render();}
+    else if(t.id==='ini-new-yes'){confirmNewFight=false;initGo(function(I){I.list=I.list.filter(function(e){return hero(e)});I.list.forEach(function(e){e.init='';e.tb=0;e.held=false;e.started=0});delete I.call;
+      I.round=0;I.turn='';I.fx=I.fx.filter(function(f){return !ended(f)&&!(f.who&&f.who!=='party'&&!entry(I,f.who))});I.fx.forEach(function(f){f.anchor=''});});}
+    else if(ds.iup||ds.idown){
+      I=ini();var ie=entry(I,ds.iup||ds.idown),rl=I.list.filter(function(x){return rolled(x)&&x!==ie}),ii=I.list.filter(rolled).indexOf(ie);
+      var tg=ds.iup?rl[ii-1]:rl[ii];if(ie&&tg){placeBy(I,ie,tg,!ds.iup);savePlay();postRound();}render();
+      var mv=document.querySelector('[data-'+(ds.iup?'iup':'idown')+'="'+ie.id+'"]');if(mv&&!mv.disabled)mv.focus();return;
+    }
+    else if(ds.ihold)initGo(function(I){holdTurn(I,ds.ihold)});
+    else if(ds.iact)initGo(function(I){actNow(I,ds.iact)});
+    else if(ds.iunhold){I=ini();var u=entry(I,ds.iunhold);if(u)u.held=false;savePlay();postRound();render();}
+    else if(ds.idel)initGo(function(I){if(I.turn===ds.idel)nextTurn(I);I.list=I.list.filter(function(e){return e.id!==ds.idel});I.fx.forEach(function(f){if(f.who===ds.idel)f.who='';if(f.anchor===ds.idel)f.anchor=''})});
+    else if(t.id==='fx-add'){
+      I=ini();var nm=String((document.getElementById('fx-name')||{}).value||'').trim(), unit=+((document.getElementById('fx-unit')||{}).value||1), du=n((document.getElementById('fx-dur')||{}).value);
+      var wv=(document.getElementById('fx-who')||{}).value||'';
+      if(!nm){statusMsg='Give the timer a name first.';render();var fn=document.getElementById('fx-name');if(fn)fn.focus();return}
+      if(unit&&!(du>0)){statusMsg='Type how long it lasts.';render();var fd=document.getElementById('fx-dur');if(fd)fd.focus();return}
+      var nf={id:'fx'+Date.now().toString(36),name:nm,who:wv,anchor:I.round?I.turn:'',total:unit?du*unit:null,el:0};
+      I.fx.push(nf);linkFx(I,nf,true);
+      fxForm={unit:String(unit)};statusMsg=nf.applied&&nf.applied.length?nm+' put on '+(wv==='party'?'the whole party':nf.applied.map(critName).join(', '))+'; it comes off when the timer ends.':'';savePlay();render();var fn2=document.getElementById('fx-name');if(fn2)fn2.focus();return;
+    }
+    else if(ds.fxadj){I=ini();var fa=I.fx.find(function(x){return x.id===ds.fxadj});if(fa){if(fa.total==null)fa.el=Math.max(0,(fa.el||0)+(+ds.d));else fa.el=Math.max(0,Math.min(fa.total,(fa.el||0)-(+ds.d)));checkEnds(I);savePlay();}render();}
+    else if(ds.fxdel){I=ini();var gone=I.fx.find(function(x){return x.id===ds.fxdel});if(gone&&!gone.off)linkFx(I,gone,false);I.fx=I.fx.filter(function(x){return x.id!==ds.fxdel});savePlay();render();}
+    else if(ds.fxclear){I=ini();I.fx=I.fx.filter(function(x){return !ended(x)});savePlay();render();}
+    else if(t.id==='fx-min'||t.id==='fx-10min'){I=ini();var rr=t.id==='fx-min'?10:100;I.fx.forEach(function(f){f.el=(f.el||0)+rr});checkEnds(I);savePlay();render();}
+    else return;
+    if(t.id){var back=document.getElementById(t.id);if(back&&back!==document.activeElement)back.focus();}
+  });
+  function readAddForm(){
+    function v(id){var el=document.getElementById(id);return el?el.value:''}
+    addForm={name:v('ad-name'),count:v('ad-count'),hp:v('ad-hp'),ac:v('ad-ac'),init:v('ad-init'),roll:!!(document.getElementById('ad-roll')||{}).checked};
+  }
+  document.addEventListener('keydown',function(e){
+    var el=e.target, ds=el.dataset||{};
+    if(e.key!=='Enter')return;
+    if(ds.amt){e.preventDefault();var b=document.querySelector('[data-dmg="'+ds.amt+'"]');if(b)b.click();}
+    else if(ds.cdurn){e.preventDefault();setCondTimer(ds.cdurn);}
+    // Enter in an initiative box saves it, re-sorts and jumps to the next box, so a whole round of rolls goes in quickly.
+    else if(ds.ini){
+      e.preventDefault();
+      var all=[].slice.call(document.querySelectorAll('[data-ini]')), nxt=all[all.indexOf(el)+1], nid=nxt&&nxt.dataset.ini;
+      setInit(ds.ini,el.value);postRound();render();
+      var f=nid&&document.querySelector('[data-ini="'+nid+'"]');if(f){f.focus();f.select()}
+    }
+    else if(ds.idmg){e.preventDefault();enemyHp(ds.idmg,-1);var db2=document.querySelector('[data-idmg="'+ds.idmg+'"]');if(db2)db2.focus();}
+    else if(el.id==='fx-name'||el.id==='fx-dur'){e.preventDefault();var fb=document.getElementById('fx-add');if(fb)fb.click();}
+    else if(/^ad-/.test(el.id)&&el.id!=='ad-roll'){e.preventDefault();var gb=document.getElementById('ad-go');if(gb)gb.click();}
+  });
+  document.addEventListener('input',function(e){
+    var el=e.target, ds=el.dataset, I;
+    if(ds.iname||ds.inote){I=ini();var ie=entry(I,ds.iname||ds.inote);if(ie){ie[ds.iname?'name':'note']=el.value;savePlay();}return}
+    if(el.id==='fx-name'){fxForm.name=el.value;return}
+    if(el.id==='fx-dur'){fxForm.dur=el.value;return}
+    var p=ds.id&&byId(ds.id); if(!p)return;
+    if(ds.k){p[ds.k]=el.value;dirty=true;}
+    else if(ds.dk&&el.tagName!=='SELECT'){p.dragon[ds.dk]=el.value;dirty=true;if(ds.dk==='color'){var td=el.closest('td');if(td)td.style.setProperty('--gem',el.value);}}
+    else if(ds.fk&&el.tagName!=='SELECT'){p.dragon.features[+ds.fi][ds.fk]=el.value;dirty=true;}
+  });
+  document.addEventListener('change',function(e){
+    var el=e.target, ds=el.dataset;
+    if(ds.type){lastType[ds.type]=el.value;return;}
+    if(ds.cur){var v=n(el.value);if(v===null)delete play.hp[ds.cur];else play.hp[ds.cur]=Math.max(0,v);savePlay();render();return;}
+    if(ds.temp){var tv=n(el.value);if(tv===null||tv<=0)delete play.temp[ds.temp];else play.temp[ds.temp]=tv;savePlay();render();return;}
+    // re-sort once focus has moved on (change fires before it does), then put focus back where it went
+    if(ds.ini){setInit(ds.ini,el.value);postRound();setTimeout(function(){
+      var a=document.activeElement, sel=null, key=a&&a.dataset&&['ini','iname','inote','idmg','ihpcur'].find(function(k){return a.dataset[k]});
+      if(key)sel='[data-'+key+'="'+a.dataset[key]+'"]';else if(a&&a.id)sel='#'+a.id;
+      render();var f=sel&&document.querySelector(sel);if(f)f.focus();},0);return}
+    if(ds.ihpcur){var Ih=ini(),eh=entry(Ih,ds.ihpcur),hv=n(el.value);if(eh&&hv!=null){eh.hp=hv;savePlay();}softRender();return}
+    if(el.id==='fx-unit'){fxForm.unit=el.value;render();var fu=document.getElementById('fx-unit');if(fu)fu.focus();return}
+    if(el.id==='fx-who'){fxForm.who=el.value;return}
+    if(/^ad-/.test(el.id)){readAddForm();return}
+    var p=ds.id&&byId(ds.id); if(!p)return;
+    if(ds.dsp){var set=AB.filter(function(a){var cb=document.getElementById('dsp-'+a+'-'+p.id);return cb&&cb.checked});p.dragon.saves=set.join(',');dirty=true;}
+    else if(ds.dk==='bond'){p.dragon.bond=el.value;var cap=TKNOWN[bondLv(p)];if(p.dragon.tactics.length>cap)p.dragon.tactics=p.dragon.tactics.slice(0,cap);dirty=true;render();}
+    else if(ds.fk==='per'){p.dragon.features[+ds.fi].per=el.value;dirty=true;}
+  });
+
+  function save(){
+    state.updated=new Date().toISOString().slice(0,10);
+    statusMsg=put(STORE,state)||cloud?'Saved':'This browser blocked saving. Export a backup to keep your edits.';
+    cloudPush();
+    editing=false;dirty=false;ask='';render();
+  }
+
+  // ---------- Backup ----------
+  function backupJson(){return JSON.stringify({sheet:'arcanum-dragon-riders',version:1,updated:state.updated,party:state.party,play:play},null,2)}
+  function dialog(id,title,body){
+    var d=document.getElementById(id);
+    if(!d){d=document.createElement('dialog');d.id=id;d.setAttribute('aria-labelledby',id+'-t');document.body.appendChild(d);}
+    d.innerHTML='<div class="dlg-head"><h2 id="'+id+'-t">'+title+'</h2><button data-close="1">Close</button></div>'+body;
+    if(!d.open)d.showModal();return d;
+  }
+  function openExport(){
+    dialog('export-dlg','Export backup','<p class="minor">Download a backup file, or copy this text into a note to keep it safe. Import backup on any device restores the whole sheet, including current HP, conditions and the initiative tracker.</p>'+
+      '<textarea id="export-text" readonly aria-label="Backup text">'+esc(backupJson())+'</textarea>'+
+      '<div class="dlg-actions"><button class="primary" id="dl-json">Download file</button><button id="copy-json">Copy backup</button><span class="status" id="export-status"></span></div>');
+  }
+  function copyJson(){
+    var ta=document.getElementById('export-text'), st=document.getElementById('export-status');
+    function fallback(){ta.focus();ta.select();st.textContent='Text selected. Press Ctrl+C to copy.';}
+    try{navigator.clipboard.writeText(ta.value).then(function(){st.textContent='Copied';},fallback);}catch(err){fallback();}
+  }
+  function downloadJson(){
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([backupJson()],{type:'application/json'}));
+    a.download='arcanum-riders-backup-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);
+    document.getElementById('export-status').textContent='Backup downloaded';
+  }
+  function openImport(){
+    dialog('import-dlg','Import backup','<p class="minor">Paste backup text, or choose a backup file. This replaces the whole sheet'+(cloud?' on every device.':' on this device.')+'</p>'+
+      '<input type="file" id="import-file" accept=".json,application/json" aria-label="Backup file">'+
+      '<textarea id="import-text" style="margin-top:8px" placeholder="Paste backup text here" aria-label="Backup text"></textarea>'+
+      '<div class="dlg-actions"><button class="primary" id="load-json">Import</button><span class="status" id="import-status"></span></div>');
+  }
+  document.addEventListener('change',function(e){
+    if(e.target.id!=='import-file'||!e.target.files[0])return;
+    var fr=new FileReader();fr.onload=function(){document.getElementById('import-text').value=fr.result;importText(fr.result);};fr.readAsText(e.target.files[0]);
+  });
+  function importText(txt){
+    var st=document.getElementById('import-status');
+    try{var d=JSON.parse(txt);if(!d||!Array.isArray(d.party))throw 0;
+      state={updated:d.updated||new Date().toISOString().slice(0,10),party:d.party};fixParty();
+      play=d.play&&typeof d.play==='object'?d.play:{};normPlay();logs={};rolls={};
+      saveState();savePlay();statusMsg='Backup imported';
+      var dl=document.getElementById('import-dlg');if(dl)dl.close();render();
+    }catch(err){if(st)st.textContent='That isn’t a backup from this sheet. Use the text or file from Export backup.';}
+  }
+
+  // ---------- Online saving: on the website (js/cloud.js), the whole sheet lives in one shared document, party/main ----------
+  var cloudDb=null, cloud=null, cloudTimer=null, cloudPending=false, cloudBusy=false, cloudAgain=false, cloudRemote='';
+  function cloudBody(){return {state:state,play:play}}
+  // Key-order-independent fingerprint, so a document read back from the server compares equal to what was sent.
+  function canon(v){
+    if(Array.isArray(v))return '['+v.map(canon).join(',')+']';
+    if(v&&typeof v==='object')return '{'+Object.keys(v).sort().filter(function(k){return v[k]!==undefined}).map(function(k){return JSON.stringify(k)+':'+canon(v[k])}).join(',')+'}';
+    return JSON.stringify(v);
+  }
+  function cloudPush(){
+    if(!cloud)return;
+    cloudPending=true;clearTimeout(cloudTimer);cloudTimer=setTimeout(function(){cloudPending=false;cloudWrite()},700);
+  }
+  function cloudWrite(){
+    if(!cloud)return;
+    if(cloudBusy){cloudAgain=true;return}
+    var body=JSON.parse(JSON.stringify(cloudBody())), sig=canon(body);
+    if(sig===cloudRemote)return;
+    cloudBusy=true;
+    cloud.set(body).then(function(){cloudRemote=sig;}).catch(function(err){
+      var c=err&&err.code;
+      if(c==='invalid_argument'){statusMsg='This copy is view-only; changes stay on this device.';cloud=null;}
+      else if(c==='quota_exceeded'||c==='resource_exhausted'){statusMsg='Online storage is full. Export a backup.';}
+      else {statusMsg='Couldn’t save online. Retrying…';setTimeout(cloudPush,3000);}
+      softRender();
+    }).then(function(){cloudBusy=false;if(cloudAgain){cloudAgain=false;cloudWrite();}});
+  }
+  // Take what another device saved, unless this device is mid-edit.
+  function cloudApply(d){
+    if(!d||!d.state||!Array.isArray(d.state.party))return;
+    // Local changes not yet sent win; they go out on the next write.
+    if(editing||cloudPending||cloudBusy)return;
+    var sig=canon(d);
+    if(sig===cloudRemote)return;
+    cloudRemote=sig;
+    if(sig===canon(cloudBody()))return;
+    state=JSON.parse(JSON.stringify(d.state));fixParty();
+    play=JSON.parse(JSON.stringify(d.play||{}));normPlay();
+    put(STORE,state);put(PLAY,play);
+    softRender();
+  }
+  function cloudStart(){
+    var cl=window.claude; if(!cl||!cl.use)return;
+    cl.use('db').then(function(db){
+      if(!db)return;
+      var ref=db.doc('party/main');
+      return ref.get().then(function(snap){
+        cloud=ref;cloudDb=db;
+        if(snap.exists)cloudApply(snap.data());
+        else cloudWrite();  // first time online: upload what this device has
+        statusMsg='Saved online';render();
+        ref.onSnapshot(function(s){if(s.exists&&!s.metadata.hasPendingWrites)cloudApply(s.data())},function(){});
+        // players' Hold, End turn and initiative rolls from their own sheets
+        Object.keys(SHEET_PAGES).forEach(function(id){db.doc('party/turn-'+id).onSnapshot(function(s){if(s.exists)takeReply(id,s.data())},function(){})});
+        lastRoundKey=null;postRound();
+        // what was already sent to live sheets (kept whole, since each write replaces the document)
+        db.doc('party/hp').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)hpCmds=(s.exists&&s.data())||{}},function(){});
+        db.doc('party/conds').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)dmConds=(s.exists&&s.data())||{}},function(){});
+        // riders' own sheets post their numbers here, live
+        if(db.collection)db.collection('reports').onSnapshot(function(qs){
+          var changed=false;qs.docs.forEach(function(d){if(d.exists&&acceptReport(d.data()))changed=true});
+          if(changed)softRender();
+        },function(){});
+      });
+    }).catch(function(){});
+  }
+
+  window.addEventListener('beforeunload',function(e){if(editing&&dirty){e.preventDefault();e.returnValue='';}});
+  render();
+  // DM only: nothing loads from online until this device has the DM password (js/cloud.js)
+  if(window.claude&&window.claude.use)window.claude.use('dm').then(function(ok){if(ok)cloudStart()});
+})();
+</script>
+
+</body>
+</html>

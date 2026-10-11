@@ -1,0 +1,34 @@
+rules_version = '2';
+// Firestore rules for the Dragon Riders website. Paste into Firebase console → Firestore Database → Rules,
+// after replacing the two passcodes below. Keep the real passcodes out of this file: the repo is public.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function member() { return signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.uid)); }
+    function dm() { return signedIn() && exists(/databases/$(database)/documents/dms/$(request.auth.uid)); }
+
+    // A device joins by writing the player passcode; the DM unlocks the party sheet with the DM password.
+    match /members/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && request.resource.data.code == "PLAYER-PASSCODE";
+    }
+    match /dms/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if member() && request.auth.uid == uid && request.resource.data.code == "DM-PASSWORD";
+    }
+
+    // Character sheets and their art.
+    match /sheets/{id} { allow read, write: if member(); }
+    match /art/{id} { allow read, write: if member(); }
+
+    // Each sheet's live numbers for the party sheet: players write, only the DM reads.
+    match /reports/{id} { allow read: if dm(); allow write: if member(); }
+
+    // party/main is the DM's party sheet. Sheets read the round, damage, conditions and rests the DM sends,
+    // and answer through party/turn-<rider>.
+    match /party/{doc} {
+      allow read: if dm() || (member() && doc in ['round', 'hp', 'conds', 'rest']);
+      allow write: if dm() || (member() && doc.matches('turn-.*'));
+    }
+  }
+}

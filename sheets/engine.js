@@ -186,10 +186,11 @@
   }));
 
   /* ---------- persistence ---------- */
-  const SYNC = { db: null, ref: null, status: "local", canWrite: true, myRevs: new Set(), timer: null, writing: Promise.resolve(), pendingRemote: null };
+  const SYNC = { db: null, ref: null, status: "local", canWrite: true, myRevs: new Set(), timer: null, writing: Promise.resolve(), pendingRemote: null, loaded: false };
   function persist() {
     S.updatedAt = Date.now();
     lsSet(LS_KEY, JSON.stringify(S));
+    report();
     if (!SYNC.ref || !SYNC.canWrite) return;
     clearTimeout(SYNC.timer);
     setSync("saving");
@@ -213,11 +214,18 @@
     const [c, t] = map[SYNC.status] || map.local;
     return `<span id="sync" class="chip ${c}" title="Where your changes are kept">${t}</span>`;
   }
+  /* The first answer from the online copy settles which state is real; only then does the sheet report to the
+     DM's party sheet or take damage the DM sent, so a device that never opened this sheet can't report stale numbers. */
+  function markLoaded() {
+    if (SYNC.loaded) return;
+    SYNC.loaded = true; report();
+    if (SYNC.db) watchParty(SYNC.db);
+  }
   async function initSync() {
-    if (!window.claude || !window.claude.use) return;
+    if (!window.claude || !window.claude.use) { report(); return; }
     try {
       const db = await window.claude.use("db");
-      if (!db) return;
+      if (!db) { report(); return; }
       SYNC.db = db; SYNC.ref = db.doc("sheets/" + window.CHARACTER_ID);
       setSync("synced");
       try {
@@ -226,23 +234,143 @@
       } catch (e) { /* keep defaults */ }
       SYNC.ref.onSnapshot((snap) => {
         if (snap.metadata && snap.metadata.hasPendingWrites) return;
-        if (!snap.exists) return;
+        const fromCache = !!(snap.metadata && snap.metadata.fromCache);
+        // nothing online yet: upload this device's copy if it was ever edited here
+        if (!snap.exists) { if (!fromCache) { if (S.updatedAt) persist(); markLoaded(); } return; }
         const d = snap.data();
-        if (!d || !d.state || SYNC.myRevs.has(d.rev)) return;
+        if (!d || !d.state || SYNC.myRevs.has(d.rev)) { markLoaded(); return; }
+        // this device changed the sheet after the online copy was saved (e.g. edited offline): keep this device's copy
+        if (S.updatedAt && S.updatedAt > (+d.updatedAt || 0)) { if (!fromCache) { persist(); markLoaded(); } return; }
         try { applyRemote(migrate(JSON.parse(d.state))); } catch (e) { /* malformed remote state */ }
-      }, () => setSync("error"));
+        markLoaded();
+      }, () => { setSync("error"); markLoaded(); });
       ["portrait", "dragon"].forEach((k) => {
         db.doc("art/" + window.CHARACTER_ID + "-" + k).onSnapshot((snap) => {
           if (snap.exists && snap.data().dataUrl) { ART[k] = snap.data().dataUrl; render(); }
         }, () => {});
       });
-    } catch (e) { setSync("local"); }
+    } catch (e) { setSync("local"); report(); }
   }
   function applyRemote(next) {
     const a = document.activeElement;
     if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { SYNC.pendingRemote = next; return; }
     if (JSON.stringify(next) === JSON.stringify(S)) return;
-    S = next; lsSet(LS_KEY, JSON.stringify(S)); render(); renderModal();
+    S = next; lsSet(LS_KEY, JSON.stringify(S)); render(); renderModal(); report();
+  }
+
+  /* ---------- link to the DM's party sheet ----------
+     report(): the numbers the party sheet shows live. Kept in this browser (drsheet-link:<id>, so a party sheet open in the
+     same browser sees it) and, on the website, sent online through js/cloud.js.
+     watchParty(): damage, healing, conditions and long rests the DM sends from the party sheet. Each one carries a time and
+     applies once (S.dm keeps the newest time applied per kind), so the player can still change things here afterwards. */
+  function report() {
+    if (!S || (SYNC.ref && !SYNC.loaded)) return;
+    const D = derive(), g = D.dragon, c = D.caster, id = window.CHARACTER_ID;
+    const saves = {}; ABIL.forEach((a) => { saves[a] = D.save(a); });
+    const conds = S.conds.slice(); if (S.concentration) conds.push("concentrating");
+    const rep = {
+      t: "dr-hero", v: 1, id, name: S.name, at: new Date().toISOString(), restAt: (S.dm && S.dm.rest) || "",
+      live: {
+        level: D.total, classes: classLine(D), race: S.race, ac: D.ac, init: D.init, speed: D.speed, pp: D.passive("perception", "wis"),
+        dc: c ? c.dc : null, saves, saveProf: S.saveProf.concat(D.fx.saves),
+        hp: { cur: Math.min(S.hp.current, D.hpMax), max: D.hpMax, temp: S.hp.temp || 0 }, death: S.death,
+        conds, exh: +S.exhaustion || 0, insp: !!S.inspiration, hero: S.heroPoints, conc: S.concentration || "", defenses: S.defenses || ""
+      },
+      dragon: {
+        name: S.dragon.name || "", kind: D.dragon.K.title || "", ac: g.ac, dc: g.dc, hit: g.biteHit, pb: g.pb, init: g.m.dex,
+        hp: { cur: S.dragon.hpCurrent == null ? g.hpMax : Math.min(S.dragon.hpCurrent, g.hpMax), max: g.hpMax, temp: S.dragon.hpTemp || 0 },
+        breathReady: S.dragon.breathReady !== false
+      }
+    };
+    lsSet("drsheet-link:" + id, JSON.stringify(rep));
+    if (window.sheetsReport) window.sheetsReport(id, rep);
+  }
+  function longRestNow() {
+    const D = derive();
+    S.hp.current = D.hpMax; S.hp.temp = 0; S.slotsUsed = Array(10).fill(0); S.resUsed = {};
+    S.hitDiceUsed = Math.max(0, S.hitDiceUsed - Math.max(1, Math.floor(D.total / 2)));
+    S.death = { s: 0, f: 0 }; S.concentration = "";
+    S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0;
+  }
+  function dmSeen() { if (!S.dm) S.dm = { hp: {}, cond: {}, rest: "" }; return S.dm; }
+  /* "Resistance: poison" · "fire resist" · "immune to cold" → "resist" | "immune" | "" for one damage type */
+  function defenseFor(text, type) {
+    if (!type) return "";
+    let out = "";
+    String(text || "").toLowerCase().split(/[.;]/).forEach((part) => {
+      if (!new RegExp("\\b" + type + "\\b").test(part)) return;
+      if (/immun/.test(part)) out = "immune"; else if (/resist/.test(part) && out !== "immune") out = "resist";
+    });
+    return out;
+  }
+  function dmHp(c, dragon) {
+    const D = derive(), amt = Math.max(0, Math.floor(+c.amt || 0)), type = c.type && c.type !== "untyped" ? String(c.type) : "";
+    if (dragon) {
+      const g = D.dragon; let cur = S.dragon.hpCurrent == null ? g.hpMax : S.dragon.hpCurrent; const nm = S.dragon.name || "Your dragon";
+      let txt;
+      if (c.temp) { S.dragon.hpTemp = Math.max(S.dragon.hpTemp || 0, amt); txt = `${nm}: ${amt} temp HP`; }
+      else if (c.heal) { const was = cur; cur = Math.min(g.hpMax, cur + amt); txt = `${nm} healed ${cur - was}`; }
+      else {
+        const r = defenseFor(g.K.immunities ? g.K.immunities + " immune" : "", type);
+        const d = r === "immune" ? 0 : r === "resist" ? Math.floor(amt / 2) : amt;
+        const t = Math.min(S.dragon.hpTemp || 0, d); S.dragon.hpTemp = (S.dragon.hpTemp || 0) - t; cur = Math.max(0, cur - (d - t));
+        txt = `${nm} took ${d}${type ? " " + type : ""}${r ? ` (${r === "immune" ? "immune" : "halved"})` : ""}${t ? `, ${t} from temp HP` : ""}`;
+      }
+      S.dragon.hpCurrent = cur >= g.hpMax ? null : cur; return txt;
+    }
+    if (c.temp) { S.hp.temp = Math.max(S.hp.temp || 0, amt); return `${amt} temp HP`; }
+    if (c.heal) {
+      const was = Math.min(S.hp.current, D.hpMax); S.hp.current = Math.min(D.hpMax, was + amt);
+      if (S.hp.current > 0) S.death = { s: 0, f: 0 };
+      return `Healed ${S.hp.current - was}`;
+    }
+    let r = defenseFor(S.defenses, type); if (!r && S.conds.includes("petrified")) r = "resist";
+    const d = r === "immune" ? 0 : r === "resist" ? Math.floor(amt / 2) : amt;
+    const t = Math.min(S.hp.temp || 0, d); S.hp.temp = (S.hp.temp || 0) - t;
+    const was = S.hp.current; S.hp.current = Math.max(0, was - (d - t));
+    let txt = `Took ${d}${type ? " " + type : ""} damage${r ? ` (${r === "immune" ? "immune" : "halved"})` : ""}${t ? `, ${t} from temp HP` : ""}`;
+    if (was === 0 && d - t > 0) { S.death.f = Math.min(3, S.death.f + 1); txt += ". Hit at 0 HP: one death save failure"; }
+    else if (S.hp.current === 0) txt += ". Down to 0 HP: start rolling death saves";
+    else if (S.concentration && d > 0) txt += `. Concentration: CON save DC ${Math.max(10, Math.floor(d / 2))}`;
+    return txt;
+  }
+  function watchParty(db) {
+    const me = window.CHARACTER_ID, mine = [[me, false], [me + "-dragon", true]];
+    db.doc("party/hp").onSnapshot((s) => {
+      const all = (s.exists && s.data()) || {}, seen = dmSeen(), msg = [];
+      mine.forEach(([k, dragon]) => {
+        const list = (all[k] || []).filter((c) => c && c.at && c.at > (seen.hp[k] || "")).sort((x, y) => (x.at < y.at ? -1 : 1));
+        if (seen.hp[k] == null) { if (list.length) seen.hp[k] = list[list.length - 1].at; else seen.hp[k] = ""; return; } // first link: skip old ones
+        list.forEach((c) => { seen.hp[k] = c.at; msg.push(dmHp(c, dragon)); });
+      });
+      if (msg.length) { commit(); toast("From the DM", msg.map(esc).join("<br>"), 7000); }
+    }, () => {});
+    db.doc("party/conds").onSnapshot((s) => {
+      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = [];
+      const first = !seen.condLinked; seen.condLinked = true; let changed = first;
+      Object.keys(mine2).forEach((k) => {
+        const v = mine2[k] || {}, at = String(v.at || "");
+        if (!at || at <= (seen.cond[k] || "")) return; seen.cond[k] = at; changed = true;
+        if (first) return; // first link: skip what was sent before
+        if (k === "exh") { const x = Math.max(0, Math.min(6, +v.v || 0)); if (x !== +S.exhaustion) { S.exhaustion = x; msg.push(`exhaustion ${x}`); } return; }
+        if (k === "insp") { if (!!v.on !== !!S.inspiration) { S.inspiration = !!v.on; msg.push(v.on ? "inspiration" : "removed inspiration"); } return; }
+        if (k === "concentrating") {
+          if (!v.on && S.concentration) { msg.push(`ended concentration on ${S.concentration}`); S.concentration = ""; }
+          else if (v.on && !S.concentration) { S.concentration = "a spell"; msg.push("concentrating"); }
+          return;
+        }
+        const c = CONDITIONS.find((x) => x[0] === k); if (!c) return;
+        if (S.conds.includes(k) !== !!v.on) { S.conds = v.on ? S.conds.concat(k) : S.conds.filter((x) => x !== k); msg.push((v.on ? "" : "removed ") + c[1].toLowerCase()); }
+      });
+      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (changed) persist();
+    }, () => {});
+    db.doc("party/rest").onSnapshot((s) => {
+      if (!s.exists) return; const at = String((s.data() || {}).at || ""), seen = dmSeen();
+      if (!at || at <= (seen.rest || "")) return;
+      const first = !seen.rest; seen.rest = at;
+      if (first && Date.now() - Date.parse(at) > 6 * 3600e3) { persist(); return; } // an old rest from before this sheet linked up
+      longRestNow(); commit(); toast("Long rest from the DM", "HP, spell slots and features restored.");
+    }, () => {});
   }
   document.addEventListener("focusout", () => setTimeout(() => {
     const a = document.activeElement;
@@ -1482,14 +1610,7 @@
       derive().resources.filter((r) => r.reset === "short").forEach((r) => (S.resUsed[r.id] = 0));
       S.dragon.guardUsed = false; MODAL = null; commit(); toast("Short rest finished", "Channel Divinity restored.");
     },
-    finishLong: () => {
-      const D = derive();
-      S.hp.current = D.hpMax; S.hp.temp = 0; S.slotsUsed = Array(10).fill(0); S.resUsed = {};
-      S.hitDiceUsed = Math.max(0, S.hitDiceUsed - Math.max(1, Math.floor(D.total / 2)));
-      S.death = { s: 0, f: 0 }; S.concentration = "";
-      S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0;
-      MODAL = null; commit(); toast("Long rest finished", "HP, slots and features restored.");
-    },
+    finishLong: () => { longRestNow(); MODAL = null; commit(); toast("Long rest finished", "HP, slots and features restored."); },
     // options
     optSet: (e) => { MODAL[e.dataset.k] = e.dataset.v; renderModal(); },
     undoLevel: () => {

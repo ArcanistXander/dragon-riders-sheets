@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Builds a standalone copy of the character sheets for any normal website.
 #
-# The pages in sheets/ are written for claude.ai, which adds the <!doctype>,
-# <head> and <body> wrapper itself. This script adds that wrapper, copies the
-# scripts and art, and writes an index page listing every character.
+# The character pages in sheets/ are written for claude.ai, which adds the
+# <!doctype>, <head> and <body> wrapper itself. This script adds that wrapper,
+# adds the website-only scripts (js/cloud.js for online saving through Firebase,
+# js/turn.js for turns from the DM's initiative tracker), copies the scripts
+# and art, and writes an index page listing every character.
+# Pages that are already full documents (party.html) are copied as they are.
 #
 # Usage (from the campaign folder, in Git Bash):   bash build-website.sh
 # Then commit and push; GitHub Pages serves the docs/ folder.
@@ -15,14 +18,23 @@ OUT="$(cd "$(dirname "$0")" && pwd)/docs"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp "$SRC/engine.js" "$OUT/"
-cp -r "$SRC/data" "$SRC/art" "$OUT/"
+cp -r "$SRC/data" "$SRC/art" "$SRC/js" "$OUT/"
 
 RESET=':root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}'
 
 cards=""
+party=""
 for page in "$SRC"/*.html; do
   name="$(basename "$page")"
+  id="${name%.html}"
   title="$(sed -n 's:.*<title>\(.*\)</title>.*:\1:p' "$page" | head -n 1)"
+  if head -c 64 "$page" | grep -qi '<!doctype'; then
+    cp "$page" "$OUT/$name"
+    party="$party<li><a class=\"party\" href=\"$name\">Party sheet &amp; initiative<small>$title · for the DM</small></a></li>"
+    echo "Copied $name ($title)"
+    continue
+  fi
+  first="${title%% *}"
   {
     echo '<!doctype html>'
     echo '<html lang="en">'
@@ -34,7 +46,15 @@ for page in "$SRC"/*.html; do
     sed '/<div id="app">/,$d' "$page"
     echo '</head>'
     echo '<body>'
-    sed -n '/<div id="app">/,$p' "$page"
+    # Online saving and turn pop-ups load before the sheet's own scripts.
+    sed -n '/<div id="app">/,$p' "$page" | awk -v id="$id" -v nm="$first" '
+      !done && /<script src="data\// {
+        print "<script src=\"js/firebase-config.js\"></script>"
+        print "<script src=\"js/cloud.js\"></script>"
+        print "<script src=\"js/turn.js\" data-hero=\"" id "\" data-name=\"" nm "\"></script>"
+        done = 1
+      }
+      { print }'
     echo '</body>'
     echo '</html>'
   } > "$OUT/$name"
@@ -60,13 +80,15 @@ p { color: var(--muted); margin: 0 0 28px; }
 ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 a { display: block; padding: 16px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); text-decoration: none; font-family: "Marcellus SC", Georgia, serif; font-size: 1.3rem; }
 a:hover, a:focus-visible { border-color: var(--bronze); color: var(--bronze); outline: none; }
+a.party { border-left: 5px solid var(--bronze); }
+a small { display: block; font-family: "Alegreya Sans", "Segoe UI", system-ui, sans-serif; font-size: .9rem; color: var(--muted); margin-top: 2px; }
 </style>
 </head>
 <body>
 <main>
 <h1>Dragon Riders</h1>
 <p>Character sheets for the riders and their bonded dragons.</p>
-<ul>$cards</ul>
+<ul>$party$cards</ul>
 </main>
 </body>
 </html>
