@@ -1001,9 +1001,9 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   }
   function roundsTxt(r){return r+' round'+(r===1?'':'s')+(r>=10?' (≈'+(Math.round(r*6/60*10)/10)+' min)':'')}
   // Tell the riders' sheets the round and whose turn it is (js/turn.js). turn, next, held and callFor are entry ids, only for
-  // riders reading a live sheet; turnName is what players see, and enemies show as "Enemy" so their names stay hidden.
+  // riders reading a live sheet; turnName is what players see: enemies show by the name typed in their slot.
   function sheetId(e){var p=e&&hero(e);return p&&hasSheet(p)&&!p.paper?e.id:''}
-  function shownName(e){return e?(hero(e)?eName(e):'Enemy'):''}
+  function shownName(e){return e?eName(e):''}
   function callFor(I){return I.call&&!I.round?I.list.filter(function(e){return hero(e)&&!rolled(e)}).map(sheetId).filter(Boolean):[]}
   function postRound(){
     var I=ini(), c=I.round?entry(I,I.turn):null, nx=I.round?peek(I,1):null;
@@ -1012,7 +1012,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       held:I.round?I.list.filter(function(e){return e.held}).map(sheetId).filter(Boolean):[],
       notes:c&&sheetId(c)&&I.notes&&I.notes[c.id]?I.notes[c.id]:[],
       call:I.call&&!I.round?I.call.id:'', callFor:callFor(I),
-      // the turn order players see on their sheets during combat: who's in the fight, in order (enemies stay "Enemy")
+      // the turn order players see on their sheets during combat: who's in the fight, in order
       order:I.round?I.list.filter(rolled).map(function(e){var o={n:shownName(e)};if(hero(e))o.id=e.id;if(e===c)o.cur=1;if(e.held)o.held=1;if(!hero(e)&&e.hpMax!=null&&e.hp<=0)o.down=1;return o}):[]};
     var key=JSON.stringify(doc);
     if(!cloudDb||key===lastRoundKey) return; lastRoundKey=key;
