@@ -187,7 +187,6 @@ dialog textarea{min-height:240px;font-family:ui-monospace,Consolas,monospace;fon
 .ini-list{list-style:none;margin:0;padding:0;background:var(--panel);border:1px solid var(--rule);border-radius:8px;overflow:hidden}
 .ini-row{display:grid;grid-template-columns:1.25rem 4.75rem minmax(0,1fr) auto;gap:6px 16px;align-items:center;padding:10px 14px 10px 10px;border-bottom:1px solid var(--rule)}
 .ini-row:last-child{border-bottom:0}
-.ini-row.drag{border-left:4px solid var(--gem,var(--fly));padding-left:6px}
 .ini-row.cur{background:var(--accent-soft);box-shadow:inset 4px 0 0 var(--accent)}
 .ini-row.held{background:var(--fly-soft)}
 .ini-row.out .name{color:var(--muted)}
@@ -203,7 +202,7 @@ input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15r
 .ini-sub .chip{border:1px solid var(--weak)}
 .tag{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:4px;padding:1px 6px}
 .tag.dm{background:var(--weak-soft);color:var(--weak)}
-.tag.drg{background:var(--fly-soft);color:var(--fly)}
+.tag.drg{background:var(--fly-soft);color:var(--fly);border-left:4px solid var(--gem,var(--fly));text-transform:none;letter-spacing:0;font-size:.8rem}
 .tag.hold{background:var(--fly);color:var(--panel)}
 .tag.fx{background:var(--accent-soft);color:var(--accent);text-transform:none;letter-spacing:0}
 .tag.fx.ended{background:var(--weak-soft);color:var(--weak)}
@@ -876,9 +875,9 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     return col1+col2+col3;
   }
 
-  // ---------- Initiative tracker: riders, their dragons and the DM's enemies; rounds, turns, held turns, timed effects ----------
+  // ---------- Initiative tracker: riders (their dragon acts on the rider's turn) and the DM's enemies; rounds, turns, held turns, timed effects ----------
   // Kept in play.init so it saves online with the rest of the sheet: {list, fx, round, turn, cid, call, notes}.
-  // Entries: {id:'pc-<rider>', pc} for a rider, {id:'dr-<rider>', dr} for their dragon, {id:'dm-…', name, s:{ac,init}, hp, hpMax} for enemies.
+  // Entries: {id:'pc-<rider>', pc} for a rider and their dragon, {id:'dm-…', name, s:{ac,init}, hp, hpMax} for enemies.
   // list stays sorted: highest initiative first, ties by tb (set from the initiative modifier, or by moving someone).
   // A timed effect counts down when its anchor's turn starts (the turn it was added on), so it ends just before
   // that turn the right number of rounds later, as in the rules.
@@ -890,21 +889,25 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(!I||!Array.isArray(I.list))I=play.init={list:[],fx:[],round:0,turn:'',cid:''};
     if(!Array.isArray(I.fx))I.fx=[];
     var ids=state.party.map(function(p){return p.id});
-    I.list=I.list.filter(function(e){var r=e.pc||e.dr;return !r||ids.indexOf(r)>=0});
+    I.list=I.list.filter(function(e){return !e.dr&&(!e.pc||ids.indexOf(e.pc)>=0)});   // dragons used to have their own spot
     state.party.forEach(function(p){
       if(!entry(I,'pc-'+p.id))I.list.push({id:'pc-'+p.id,pc:p.id,init:'',tb:0});
-      if(!entry(I,'dr-'+p.id))I.list.push({id:'dr-'+p.id,dr:p.id,init:'',tb:0});
     });
     return I;
   }
-  function hero(e){var r=e&&(e.pc||e.dr);return r?byId(r)||null:null}
-  function eName(e){var p=hero(e);return p?(e.dr?dName(p):p.name):(e.name||'Enemy')}
-  function critOf(e){var p=hero(e);return p?(e.dr?did(p):p.id):''}
+  function hero(e){return e&&e.pc?byId(e.pc)||null:null}
+  function eName(e){var p=hero(e);return p?p.name+' / '+dName(p):(e.name||'Enemy')}
+  // Timers can be on a rider ('pc-<rider>'), on their dragon alone ('dr-<rider>'), the whole party, or an enemy.
   function entryOf(cid){return /-dragon$/.test(cid)?'dr-'+cid.slice(0,-7):'pc-'+cid}
+  function turnOf(cid){return 'pc-'+cid.replace(/-dragon$/,'')}
+  function whoName(I,id){
+    var m=/^(pc|dr)-(.+)$/.exec(id||''), p=m&&byId(m[2]);
+    if(p)return m[1]==='dr'?dName(p):p.name;
+    var e=id&&entry(I,id);return e?eName(e):'';
+  }
   function initMod(e){
     var p=hero(e);
     if(!p){var mm=e.s&&String(e.s.init||'').match(/[+−-]?\d+/);return mm?+mm[0].replace('−','-'):null}
-    if(e.dr){var ld=liveDragon(p);return ld&&ld.init!=null?+ld.init:mod(p.dragon.dex)}
     return stat(p,'init');
   }
   function rolled(e){return e.init!==''&&e.init!=null&&!isNaN(+e.init)}
@@ -963,7 +966,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function fxCond(f){return f.cond||condIdFor(f.name)}
   function fxTargets(I,f){
     if(f.who==='party')return [].concat.apply([],state.party.map(function(p){return [p.id,did(p)]}));
-    var e=f.who&&entry(I,f.who);return e&&hero(e)?[critOf(e)]:[];
+    var m=/^(pc|dr)-(.+)$/.exec(f.who||''), p=m&&byId(m[2]);
+    return p?[m[1]==='dr'?did(p):p.id]:[];
   }
   function linkFx(I,f,on){
     var c=fxCond(f); if(!c) return;
@@ -979,7 +983,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       var done=ended(f);
       if(done&&!f.off){
         f.off=true; var hs=(f.applied&&f.applied.length?f.applied:fxTargets(I,f)).slice();
-        linkFx(I,f,false); hs.forEach(function(h){note(I,entryOf(h),f.name+' ended')});
+        linkFx(I,f,false); hs.forEach(function(h){note(I,turnOf(h),critName(h)+': '+f.name+' ended')});
       } else if(!done&&f.off){f.off=false;linkFx(I,f,true)}
     });
   }
@@ -992,8 +996,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   }
   // Start of a turn: a word on timers in their last round.
   function upkeep(I,e){
-    var cid=critOf(e);
-    I.fx.forEach(function(f){if(f.total!=null&&!ended(f)&&f.total-(f.el||0)===1&&(f.who===e.id||(cid&&fxTargets(I,f).indexOf(cid)>=0)))note(I,e.id,f.name+': last round')});
+    var p=hero(e), mine=p?[p.id,did(p)]:[];
+    I.fx.forEach(function(f){if(f.total!=null&&!ended(f)&&f.total-(f.el||0)===1&&(f.who===e.id||fxTargets(I,f).some(function(h){return mine.indexOf(h)>=0})))note(I,e.id,f.name+': last round')});
   }
   function roundsTxt(r){return r+' round'+(r===1?'':'s')+(r>=10?' (≈'+(Math.round(r*6/60*10)/10)+' min)':'')}
   // Tell the riders' sheets the round and whose turn it is (js/turn.js). turn, next, held and callFor are entry ids, only for
@@ -1038,13 +1042,13 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     }
   }
   function fxCard(I,f){
-    var who=f.who&&entry(I,f.who), a=f.anchor&&entry(I,f.anchor), done=ended(f), left=f.total!=null?Math.max(0,f.total-(f.el||0)):null, status, endTxt='';
+    var who=whoName(I,f.who), a=f.anchor&&entry(I,f.anchor), done=ended(f), left=f.total!=null?Math.max(0,f.total-(f.el||0)):null, status, endTxt='';
     if(f.total==null)status='Round '+((f.el||0)+1);
     else if(done)status='Ended';
     else status=roundsTxt(left)+' left';
     if(!done&&left!=null&&I.round&&a&&inTurn(a))endTxt='Ends at the start of '+eName(a)+'’s turn, round '+(I.round+left-(a.started===I.round?0:1));
     var pct=f.total?Math.round(left/f.total*100):100;
-    var onTxt=f.who==='party'?'On the whole party · ':who?'On '+esc(eName(who))+' · ':'', lk=fxCond(f);
+    var onTxt=f.who==='party'?'On the whole party · ':who?'On '+esc(who)+' · ':'', lk=fxCond(f);
     var lkTxt=lk&&!done&&f.applied&&f.applied.length?'<br>'+esc(condDef(lk)[1])+' is on '+(f.who==='party'?'everyone':esc(f.applied.map(critName).join(', ')))+' until this ends.':'';
     return '<div class="fx'+(done?' ended':'')+'"><div class="t"><b>'+esc(f.name)+'</b><span class="left">'+esc(status)+'</span></div>'+
       '<div class="minor" style="white-space:normal">'+onTxt+(f.total!=null?roundsTxt(f.total)+' total':'until ended')+(endTxt?'<br>'+esc(endTxt):'')+lkTxt+'</div>'+
@@ -1063,19 +1067,22 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(e.held)sub.push('<span class="tag hold">Holding</span>');
     if(m!=null)sub.push('<span class="st">Init <b>'+sg(m)+'</b></span>');
     if(p&&callFor(I).indexOf(e.id)>=0)sub.push('<span class="tag hold">Rolling on their sheet…</span>');
-    if(p){
-      var cid=critOf(e), cr=crit(cid), mx=effMax(cr), ch=curHp(cr);
-      if(e.dr)sub.push('<span class="tag drg">'+esc(p.name)+'’s dragon</span>');
-      sub.push('<span class="st">AC <b>'+(e.dr?dAC(p):(stat(p,'ac')==null?'—':stat(p,'ac')))+'</b></span>');
-      if(mx!=null)sub.push('<span class="st">HP <b>'+ch+'</b> / '+mx+'</span>'+(ch===0?'<span class="tag down">Down</span>':''));
-      if(cr.live)sub.push('<span class="live">●</span>');
-      var on=condOn(cid);CONDS.filter(function(x){return on[x[0]]}).forEach(function(x){sub.push('<span class="chip on">'+esc(x[1])+'</span>')});
-      if(exh(cid))sub.push('<span class="chip on">Exhaustion '+exh(cid)+'</span>');
-      if(e.dr&&isCur)sub.push('<span class="minor">Dodges unless '+esc(p.name)+' commands it (bonus action)</span>');
-    }
     if(!r)sub.push('<span>'+(active?'Not in this fight':'No roll yet')+'</span>');
-    I.fx.filter(function(f){return f.who===e.id||(f.who==='party'&&p)}).forEach(function(f){var lf=f.total!=null?Math.max(0,f.total-(f.el||0)):null;
-      sub.push('<span class="tag fx'+(ended(f)?' ended':'')+'">'+esc(f.name)+(ended(f)?' ended':lf!=null?' '+lf:'')+'</span>')});
+    // the rider and their dragon, each with AC, HP and conditions (the dragon acts on the rider's turn)
+    var who2='';
+    if(p)who2=[[p.id,p.name,stat(p,'ac')],[did(p),dName(p),dAC(p)]].map(function(x,i){
+      var cr=crit(x[0]), mx=effMax(cr), ch=curHp(cr), on=condOn(x[0]), bits=[];
+      bits.push(i?'<span class="tag drg" style="--gem:'+esc(p.dragon.color||'')+'">'+esc(x[1])+'</span>':'<span class="minor"><b>'+esc(x[1])+'</b></span>');
+      bits.push('<span class="st">AC <b>'+(x[2]==null?'—':x[2])+'</b></span>');
+      if(mx!=null)bits.push('<span class="st">HP <b>'+ch+'</b> / '+mx+'</span>'+(ch===0?'<span class="tag down">Down</span>':''));
+      if(cr.live)bits.push('<span class="live">●</span>');
+      CONDS.filter(function(c){return on[c[0]]}).forEach(function(c){bits.push('<span class="chip on">'+esc(c[1])+'</span>')});
+      if(exh(x[0]))bits.push('<span class="chip on">Exhaustion '+exh(x[0])+'</span>');
+      if(i&&isCur)bits.push('<span class="minor">Dodges unless '+esc(p.name)+' commands it (bonus action)</span>');
+      return '<div class="ini-sub">'+bits.join('')+'</div>';
+    }).join('');
+    I.fx.filter(function(f){return f.who===e.id||(p&&(f.who==='dr-'+p.id||f.who==='party'))}).forEach(function(f){var lf=f.total!=null?Math.max(0,f.total-(f.el||0)):null;
+      sub.push('<span class="tag fx'+(ended(f)?' ended':'')+'">'+esc(f.name)+(p&&f.who==='dr-'+p.id?' ('+esc(dName(p))+')':'')+(ended(f)?' ended':lf!=null?' '+lf:'')+'</span>')});
     var act='';
     if(r)act+='<button class="step" data-iup="'+e.id+'"'+(ri<=0?' disabled':'')+' aria-label="Move '+esc(eName(e))+' up" title="Move up">↑</button><button class="step" data-idown="'+e.id+'"'+(ri>=rl.length-1?' disabled':'')+' aria-label="Move '+esc(eName(e))+' down" title="Move down">↓</button>';
     if(isCur&&I.list.filter(inTurn).length>1)act+='<button data-ihold="'+e.id+'" title="Ready an action or wait: step out of the order until they act">Hold turn</button>';
@@ -1089,12 +1096,12 @@ span.chip{border:1px solid var(--rule);display:inline-block}
         '<button class="hurt" data-ihurt="'+e.id+'">Hurt</button><button class="heal" data-iheal="'+e.id+'">Heal</button></span>'+
         '<div class="hpbar"><i class="'+(pct<=25?'low':'')+'" style="width:'+pct+'%"></i></div></div>';
     }
-    return '<li class="ini-row'+(e.dr?' drag':'')+(isCur?' cur':'')+(e.held?' held':'')+(r?'':' out')+(!p&&e.hpMax!=null&&e.hp<=0?' down':'')+'"'+(e.dr?' style="--gem:'+esc(p.dragon.color||'')+'"':'')+(isCur?' aria-current="true"':'')+'>'+
+    return '<li class="ini-row'+(isCur?' cur':'')+(e.held?' held':'')+(r?'':' out')+(!p&&e.hpMax!=null&&e.hp<=0?' down':'')+'"'+(isCur?' aria-current="true"':'')+'>'+
       '<span class="ini-mark" aria-hidden="true">'+(isCur?'▶':'')+'</span>'+
       '<input class="ini-in" data-ini="'+e.id+'" inputmode="numeric" value="'+esc(r?e.init:'')+'" placeholder="—" aria-label="'+esc(eName(e))+' initiative">'+
       '<div class="ini-who">'+(p?'<span class="name">'+esc(eName(e))+'</span>':
         '<div class="dmin"><input class="ini-name" data-iname="'+e.id+'" value="'+esc(e.name)+'" aria-label="Enemy name"><input data-inote="'+e.id+'" value="'+esc(e.note||'')+'" placeholder="Notes: resistances, tactics…" aria-label="'+esc(e.name)+' notes"></div>')+
-      '<div class="ini-sub">'+sub.join('')+'</div>'+mhp+'</div>'+
+      '<div class="ini-sub">'+sub.join('')+'</div>'+who2+mhp+'</div>'+
       '<div class="ini-act">'+act+'</div></li>';
   }
   function addView(){
@@ -1136,17 +1143,17 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     var done=I.fx.filter(ended);
     var bar='<div class="ini-bar"><div class="ini-round"><span class="lbl">Round</span><span class="rn">'+(active?I.round:'—')+'</span></div>'+
       '<div class="ini-now" role="status">'+(active&&c?'<span class="lbl">Now acting</span><b>'+esc(eName(c))+'</b>'+(nx&&nx.e!==c?'<span class="minor">Next: '+esc(eName(nx.e))+(nx.wrap?' (round '+(I.round+1)+')':'')+'</span>':''):
-        '<span class="minor" style="white-space:normal">Type each initiative roll (it sorts itself), add the enemies, then Start combat. Leave a box empty to sit someone out; dragons roll their own initiative.</span>')+'</div>'+
+        '<span class="minor" style="white-space:normal">Type each initiative roll (it sorts itself), add the enemies, then Start combat. Leave a box empty to sit someone out. Dragons act on their rider’s turn.</span>')+'</div>'+
       '<div class="ini-ctl">'+(active?'<button id="ini-prev" title="Undo the last Next turn">◂ Back</button><button class="primary" id="ini-next">Next turn ▸</button><button id="ini-end">End combat</button>':
         '<button class="primary" id="ini-start"'+(seq.length?'':' disabled')+'>Start combat</button>')+'</div></div>';
-    var alert=done.length?'<div class="ini-alert" role="alert">⏱ Ended: '+done.map(function(f){var w=f.who&&entry(I,f.who);return esc(f.name)+(w?' ('+esc(eName(w))+')':'')}).join(', ')+'<button data-fxclear="1">Dismiss all</button></div>':'';
+    var alert=done.length?'<div class="ini-alert" role="alert">⏱ Ended: '+done.map(function(f){var w=whoName(I,f.who);return esc(f.name)+(w?' ('+esc(w)+')':'')}).join(', ')+'<button data-fxclear="1">Dismiss all</button></div>':'';
     var asking=callFor(I), anyLive=state.party.some(function(p){return hasSheet(p)&&!p.paper});
     var tools='<div class="ini-tools">'+(active||!anyLive?'':I.call?'<button id="ini-call-stop" title="Stop asking; type the rest yourself">Stop asking'+(asking.length?' ('+asking.length+' to go)':'')+'</button>':
-        '<button id="ini-call" title="Each rider on a live sheet without a roll gets asked to roll on their own sheet, for them and their dragon">Ask players to roll</button>')+
+        '<button id="ini-call" title="Each rider on a live sheet without a roll gets asked to roll on their own sheet">Ask players to roll</button>')+
       '<button class="primary" id="ini-add" aria-expanded="'+adding+'">Add enemies</button><button id="ini-sort" title="Re-sort by initiative">Sort</button>'+
       (confirmNewFight?'<button class="primary" id="ini-new-yes">Yes, clear for a new fight</button><button id="ini-new-no">Cancel</button>':'<button id="ini-new" title="Clears every roll and the enemies; timers keep running">New fight</button>')+'</div>';
     var list='<ol class="ini-list" aria-label="Turn order">'+I.list.map(function(e){return initRow(I,e,c,active)}).join('')+'</ol>';
-    var who='<option value="">— nobody in particular —</option><option value="party"'+(fxForm.who==='party'?' selected':'')+'>Whole party</option>'+I.list.map(function(e){var sel=fxForm.who!=null?fxForm.who===e.id:(c===e);return '<option value="'+e.id+'"'+(sel?' selected':'')+'>'+esc(eName(e))+'</option>'}).join('');
+    var who='<option value="">— nobody in particular —</option><option value="party"'+(fxForm.who==='party'?' selected':'')+'>Whole party</option>'+I.list.map(function(e){var p=hero(e),opts=p?[[e.id,p.name],['dr-'+p.id,dName(p)+' ('+p.name+'’s dragon)']]:[[e.id,eName(e)]];return opts.map(function(o,i){var sel=fxForm.who!=null?fxForm.who===o[0]:(c===e&&!i);return '<option value="'+o[0]+'"'+(sel?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')}).join('');
     var units=[['1','rounds'],['10','minutes'],['600','hours'],['0','until ended']];
     var side='<section class="ini-side" aria-labelledby="fx-title"><h2 id="fx-title">Timed effects</h2>'+
       '<div class="fx-form"><div class="r"><input id="fx-name" list="fx-names" value="'+esc(fxForm.name||'')+'" placeholder="Spell or effect (e.g. Bless, Restrained)" aria-label="Effect name" autocomplete="off">'+

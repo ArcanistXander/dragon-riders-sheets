@@ -1,34 +1,32 @@
 /* Dragon Riders sheets: turns from the DM's initiative tracker (website copy only).
    The party sheet posts party/round {cid, round, active, turn, turnName, next, nextName, held, notes, call, callFor}.
-   turn, next, held and callFor hold tracker entries: "pc-<rider>" for the rider, "dr-<rider>" for their dragon,
-   and only for riders reading a live sheet. On this rider's (or dragon's) turn the sheet pops up "Your turn", and a
-   small bar stays at the bottom with Hold and End turn. Replies go to party/turn-<rider>; the party sheet moves the tracker.
+   turn, next, held and callFor hold tracker entries ("pc-<rider>"), only for riders reading a live sheet. The dragon
+   acts on its rider's turn. On this rider's turn the sheet pops up "Your turn", and a small bar stays at the bottom
+   with Hold and End turn. Replies go to party/turn-<rider>; the party sheet moves the tracker.
    Load after cloud.js:  <script src="js/turn.js" data-hero="corbin" data-name="Corbin"></script> */
 (function(){
   'use strict';
   var me=document.currentScript, ID=me&&me.dataset.hero, NAME=(me&&me.dataset.name)||ID;
   if(!ID||!window.claude||!window.claude.use)return;
   var KEY='drsheet-turn-'+ID;   // the last turn the pop-up was shown for, so a reload doesn't show it again
-  var RIDER='pc-'+ID, DRAGON='dr-'+ID;
+  var ME='pc-'+ID;
 
-  var round=null, db=null, sent='', msg='', call=null, mine=[], rolledTxt='', callBox=null;
+  var round=null, db=null, sent='', msg='', call=null, rolledTxt='', callBox=null;
   function turnKey(){return round?round.cid+':'+round.round+':'+round.turn:''}
-  function mineE(e){return e===RIDER||e===DRAGON}
-  function myTurn(){return !!(round&&round.active&&mineE(round.turn))}
-  function heldE(){return round&&round.active?(round.held||[]).filter(mineE):[]}
+  function myTurn(){return !!(round&&round.active&&round.turn===ME)}
+  function holding(){return !!(round&&round.active&&(round.held||[]).indexOf(ME)>=0)}
   function shown(k){try{if(localStorage.getItem(KEY)===k)return true;localStorage.setItem(KEY,k)}catch(e){}return false}
-  /* this sheet's own report (kept in this browser): initiative bonuses and the dragon's name */
+  /* this sheet's own report (kept in this browser): the initiative bonus and the dragon's name */
   function rep(){try{return JSON.parse(localStorage.getItem('drsheet-link:'+ID)||'null')}catch(e){return null}}
-  function dragonName(){var r=rep();return (r&&r.dragon&&r.dragon.name)||(round&&round.turn===DRAGON&&round.turnName)||'Your dragon'}
-  function who(e){return e===DRAGON?dragonName():NAME}
-  function bonus(e){var r=rep();if(!r)return null;var v=e===DRAGON?r.dragon&&r.dragon.init:r.live&&r.live.init;return v==null||isNaN(+v)?null:+v}
+  function dragonName(){var r=rep();return (r&&r.dragon&&r.dragon.name)||'your dragon'}
+  function bonus(){var r=rep(),v=r&&r.live&&r.live.init;return v==null||isNaN(+v)?null:+v}
   function sgn(v){return v<0?'− '+(-v):'+ '+v}
 
   /* ---- talking to the DM's tracker ---- */
-  function reply(act,entry){
+  function reply(act){
     if(!db||!round)return;
     sent=act; draw();
-    db.doc('party/turn-'+ID).set({cid:round.cid,round:round.round,entry:entry||round.turn,act:act,at:new Date().toISOString()})
+    db.doc('party/turn-'+ID).set({cid:round.cid,round:round.round,entry:ME,act:act,at:new Date().toISOString()})
       .catch(function(){sent='';msg='Couldn’t reach the DM’s tracker. Tell the DM.';draw()});
   }
   function onRound(d){
@@ -37,8 +35,7 @@
     if(turnKey()!==was){sent='';msg=''}
     if(myTurn()&&!shown(turnKey()))popup();
     /* the DM asked everyone to roll initiative */
-    mine=d&&!d.active&&d.call?(d.callFor||[]).filter(mineE):[];
-    call=mine.length?d.call:null;
+    call=d&&!d.active&&d.call&&(d.callFor||[]).indexOf(ME)>=0?d.call:null;
     if(!call&&callBox){callBox.close();callBox=null}
     if(!(d&&d.call))rolledTxt='';
     if(call&&!callBox&&!shown('init:'+call))rollPopup();
@@ -77,23 +74,22 @@
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function draw(){
     mount();
-    var h='', wait=sent?' disabled':'', held=heldE();
+    var h='', wait=sent?' disabled':'';
     if(myTurn())
-      h='<div class="tt-pill mine" role="region" aria-label="Your turn"><span><b>'+(round.turn===DRAGON?esc(who(DRAGON))+'’s turn':'Your turn')+'</b> · round '+round.round+(round.nextName?' · then '+esc(round.nextName):'')+'</span>'+
+      h='<div class="tt-pill mine" role="region" aria-label="Your turn"><span><b>Your turn</b> · round '+round.round+(round.nextName?' · then '+esc(round.nextName):'')+'</span>'+
         '<span class="tt-btns"><button data-tt="hold"'+wait+' title="Ready an action or wait: step out of the order and act later">Hold</button><button class="pri" data-tt="end"'+wait+'>'+(sent==='end'?'Ending…':'End turn')+'</button></span>'+
         (msg?'<span class="tt-msg" role="status">'+esc(msg)+'</span>':'')+'</div>';
-    else if(held.length)
-      h='<div class="tt-pill next"><span><b>'+esc(held.map(who).join(' and '))+' holding</b> · round '+round.round+' · '+esc(round.turnName||'someone')+' is acting</span>'+
-        '<span class="tt-btns">'+held.map(function(e){return '<button class="pri" data-tt="act" data-e="'+e+'"'+wait+'>'+(sent==='act'?'Sending…':(held.length>1?esc(who(e))+' acts now':'Act now'))+'</button>'}).join('')+'</span></div>';
+    else if(holding())
+      h='<div class="tt-pill next"><span><b>Holding</b> · round '+round.round+' · '+esc(round.turnName||'someone')+' is acting</span><button class="pri" data-tt="act"'+wait+'>'+(sent==='act'?'Sending…':'Act now')+'</button></div>';
     else if(round)
-      h='<div class="tt-pill'+(mineE(round.next)?' next':'')+'"><span>Round '+round.round+' · '+esc(round.turnName||'someone')+'’s turn'+(mineE(round.next)?' · <b>'+(round.next===DRAGON?esc(who(DRAGON))+' is next':'you’re next')+'</b>':'')+'</span></div>';
+      h='<div class="tt-pill'+(round.next===ME?' next':'')+'"><span>Round '+round.round+' · '+esc(round.turnName||'someone')+'’s turn'+(round.next===ME?' · <b>you’re next</b>':'')+'</span></div>';
     else if(call&&!callBox)
       h='<div class="tt-pill next"><span><b>Roll initiative</b> for the DM</span><button class="pri" data-tt="roll">Roll</button></div>';
     else if(rolledTxt)
       h='<div class="tt-pill"><span>'+esc(rolledTxt)+' · waiting for the fight to start</span></div>';
     root.innerHTML=h;
   }
-  root.addEventListener('click',function(ev){var b=ev.target.closest('button[data-tt]');if(!b)return;if(b.dataset.tt==='roll')rollPopup();else reply(b.dataset.tt,b.dataset.e)});
+  root.addEventListener('click',function(ev){var b=ev.target.closest('button[data-tt]');if(!b)return;if(b.dataset.tt==='roll')rollPopup();else reply(b.dataset.tt)});
 
   /* ---- pop-ups ---- */
   function buzz(){try{if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate([120,80,120])}catch(e){}}
@@ -110,36 +106,36 @@
   }
   function popup(){
     buzz();
-    var dragon=round.turn===DRAGON, notes=(round.notes||[]).map(function(t){return '<li>'+esc(t)+'</li>'}).join('');
-    modal('<div class="tt-box" role="alertdialog" aria-modal="true" aria-labelledby="tt-yt"><h2 id="tt-yt">'+(dragon?esc(who(DRAGON))+'’s turn!':'Your turn, '+esc(NAME)+'!')+'</h2>'+
-      '<p>Round '+round.round+(round.nextName?'. '+esc(round.nextName)+' is up after '+(dragon?'it':'you')+'.':'.')+'</p>'+
-      (dragon?'<p>It takes the Dodge action unless you spend a bonus action to command it.</p>':'')+
+    var notes=(round.notes||[]).map(function(t){return '<li>'+esc(t)+'</li>'}).join(''), dn=dragonName();
+    modal('<div class="tt-box" role="alertdialog" aria-modal="true" aria-labelledby="tt-yt"><h2 id="tt-yt">Your turn, '+esc(NAME)+'!</h2>'+
+      '<p>Round '+round.round+(round.nextName?'. '+esc(round.nextName)+' is up after you.':'.')+'</p>'+
+      '<p>'+esc(dn.charAt(0).toUpperCase()+dn.slice(1))+' acts on your turn too. It takes the Dodge action unless you spend a bonus action to command it.</p>'+
       (notes?'<ul class="tt-notes">'+notes+'</ul>':'')+
-      '<div class="tt-row"><button data-a="end">End turn (pass)</button><button data-a="hold">Hold</button><button class="pri" data-a="go">'+(dragon?'Command it':'Take my turn')+'</button></div></div>',
+      '<div class="tt-row"><button data-a="end">End turn (pass)</button><button data-a="hold">Hold</button><button class="pri" data-a="go">Take my turn</button></div></div>',
       function(a,v,close){close();if(a!=='go')reply(a)});
   }
   function rollPopup(){
     if(!call||callBox)return;
     buzz();
-    var rows=mine.map(function(e){var b=bonus(e);
-      return '<label>'+esc(e===DRAGON?who(DRAGON):'You ('+NAME+')')+(b!=null?' <span style="font-weight:400;color:var(--tt-muted)">d20 '+sgn(b)+'</span>':'')+
-        '<input class="tt-init" data-e="'+e+'" type="number" inputmode="numeric" aria-label="'+esc(who(e))+' initiative total" placeholder="Total"></label>'}).join('');
+    var b=bonus();
     callBox=modal('<div class="tt-box" role="dialog" aria-modal="true" aria-labelledby="tt-ri"><h2 id="tt-ri">Roll initiative!</h2>'+
-      '<p>Type your total'+(mine.length>1?'s':'')+', or let the sheet roll.</p>'+rows+
+      '<p>Type your total'+(b!=null?' (d20 '+sgn(b)+')':'')+', or let the sheet roll. Your dragon acts on your turn.</p>'+
+      '<input class="tt-init" type="number" inputmode="numeric" aria-label="Initiative total" placeholder="Total">'+
       '<p class="tt-msg" role="status"></p>'+
       '<div class="tt-row"><button data-a="later">Later</button><button data-a="auto">Roll for me</button><button class="pri" data-a="send">Send</button></div></div>',
       function(a,v,close){
-        var boxes=[].slice.call(v.querySelectorAll('.tt-init')), m=v.querySelector('.tt-msg'), out={}, txt=[];
+        var box=v.querySelector('.tt-init'), m=v.querySelector('.tt-msg'), out={};
         if(a==='later'){close();callBox=null;draw();return}
         if(a==='auto'){
-          boxes.forEach(function(box){var e=box.dataset.e,b=bonus(e)||0,d=1+Math.floor(Math.random()*20);box.value=d+b;out[e]=d+b;txt.push(who(e)+' '+(d+b)+' (rolled '+d+')')});
-          m.textContent=txt.join(' · ');sendInit(out,'Rolled '+txt.join(', '));shown('init:'+call);setTimeout(function(){close();callBox=null;draw()},1600);return;
+          var d=1+Math.floor(Math.random()*20), t=d+(b||0); box.value=t; out[ME]=t;
+          m.textContent='Rolled '+d+(b?' '+sgn(b):'')+' = '+t;sendInit(out,'You rolled '+t);shown('init:'+call);setTimeout(function(){close();callBox=null;draw()},1400);return;
         }
-        for(var i=0;i<boxes.length;i++){var x=parseInt(boxes[i].value,10);if(isNaN(x)){m.textContent='Type every initiative total first.';boxes[i].focus();return}out[boxes[i].dataset.e]=x;txt.push(who(boxes[i].dataset.e)+' '+x)}
-        sendInit(out,'Rolled '+txt.join(', '));shown('init:'+call);close();callBox=null;draw();
+        var x=parseInt(box.value,10);
+        if(isNaN(x)){m.textContent='Type your initiative total first.';box.focus();return}
+        out[ME]=x;sendInit(out,'You rolled '+x);shown('init:'+call);close();callBox=null;draw();
       });
     callBox.onEsc=function(){callBox=null;draw()};
-    [].slice.call(layer.querySelectorAll('.tt-init')).forEach(function(inp,i,all){inp.addEventListener('keydown',function(e){if(e.key!=='Enter')return;e.preventDefault();if(all[i+1])all[i+1].focus();else{var s=layer.querySelector('[data-a="send"]');if(s)s.click()}})});
+    var inp=layer.querySelector('.tt-init'); if(inp)inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();var s=layer.querySelector('[data-a="send"]');if(s)s.click()}});
     draw();
   }
   if(document.body)draw();else document.addEventListener('DOMContentLoaded',draw);
