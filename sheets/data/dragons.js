@@ -145,6 +145,26 @@ window.DRAGON_KINDS = {
         text: () => "The dragon manipulates light and sound without components. It can cast Minor Illusion at will, and Color Spray once per long rest." }
     ]
   },
-  black:    { title: "Black Dragon",    family: "Chromatic", damageType: "acid",     breath: { shape: "15-foot cone", effect: "On a failed save, the acid clings and deals an extra 1d4 acid damage at the start of the target's next turn." } },
+  /* Noctoror Sactr (Coltyn). Numbers from the DM's party sheet. */
+  black: {
+    title: "Black Dragon", family: "Chromatic",
+    abilities: { str: 15, dex: 14, con: 13, int: 14, wis: 10, cha: 13 },
+    saveBonus: { dex: true, con: true, wis: true, cha: true },
+    speed: "30 ft., fly 40 ft., swim 30 ft.",
+    immunities: "Acid",
+    senses: "Blindsight 10 ft., Darkvision 60 ft.",
+    damageType: "acid",
+    bite: { dice: "1d6", type: "piercing", reach: "5 ft." },
+    breath: {
+      name: "Acid Breath", recharge: "5–6", shape: "20-foot line, 5 ft. wide", save: "dex",
+      effect: "Each creature in the line makes a Dexterity save, taking the damage on a failure. On a failure the acid also clings, dealing 1d4 more acid damage at the start of the creature's next turn."
+    },
+    features: [
+      { level: 3, name: "Amphibious", kind: "Trait", text: () => "The dragon can breathe air and water." },
+      { level: 3, name: "Snuff Light", kind: "At will", text: () => "The dragon puts out any nonmagical light within 30 feet." },
+      { level: 3, name: "Deep-Lurker's Shroud", kind: "Action", per: "long", use: "Shroud",
+        text: (d, rider) => `The dragon pulls the shadows into a 10-foot-radius sphere around itself for 1 minute. It works like Pass without Trace: the dragon, ${rider} and allies in the sphere get +10 to Stealth checks. Once per long rest.` }
+    ]
+  },
   emerald:  { title: "Emerald Dragon",  family: "Gem",       damageType: "psychic",  breath: { shape: "15-foot cone", effect: "On a failed save, the target can't take reactions until the start of its next turn." } }
 };

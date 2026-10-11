@@ -125,17 +125,24 @@
 
   /* ---------- derived values ---------- */
   function pbFor(level) { return 2 + Math.floor((Math.max(1, level) - 1) / 4); }
+  /* A class as it casts. A subclass with `casting` (the rogue's Arcane Trickster) lays its
+     spellcasting, cantripsKnown, preparedCount and labels over the class it belongs to. */
+  function classDef(id, subKey) {
+    const C = CLASSES[id]; const sub = C && C.subclasses && C.subclasses[subKey];
+    return sub && sub.casting ? { ...C, ...sub.casting } : C;
+  }
   function slotsFor(classes) {
     let full = 0, half = 0, third = 0, n = 0, only = null;
     classes.forEach((c) => {
-      const C = CLASSES[c.id]; const p = C && C.spellcasting && C.spellcasting.progression;
+      const C = classDef(c.id, c.sub); const p = C && C.spellcasting && C.spellcasting.progression;
       if (!p) return; n++; only = c;
       if (p === "full") full += c.level; else if (p === "half") half += c.level; else if (p === "third") third += c.level;
     });
     if (!n) return [];
     let lvl = full + Math.floor(half / 2) + Math.floor(third / 3);
-    if (n === 1 && only.level < (CLASSES[only.id].spellcasting.firstSlotLevel || 1)) return [];
-    if (n === 1) { const p = CLASSES[only.id].spellcasting.progression; lvl = p === "full" ? only.level : p === "half" ? Math.ceil(only.level / 2) : Math.ceil(only.level / 3); }
+    const OC = classDef(only.id, only.sub);
+    if (n === 1 && only.level < (OC.spellcasting.firstSlotLevel || 1)) return [];
+    if (n === 1) { const p = OC.spellcasting.progression; lvl = p === "full" ? only.level : p === "half" ? Math.ceil(only.level / 2) : Math.ceil(only.level / 3); }
     return (SLOTS_FULL[Math.min(20, lvl)] || []).slice();
   }
   function dragonTier(level) {
@@ -149,7 +156,7 @@
     const mods = {}; ABIL.forEach((a) => (mods[a] = mod(s.abilities[a])));
     const D = { total, pb, mods, classes: [] };
     s.classes.forEach((c) => {
-      const C = CLASSES[c.id]; const sub = C.subclasses && C.subclasses[c.sub];
+      const C = classDef(c.id, c.sub); const sub = C.subclasses && C.subclasses[c.sub];
       const ctx = { lvl: c.level, total, pb, mod: (a) => mods[a], dragon: s.dragon && s.dragon.name };
       const feats = [];
       for (let l = 1; l <= c.level; l++) {
@@ -971,6 +978,8 @@
     return list.concat(extra);
   }
   const alwaysLabel = (c) => (c && c.sub && c.sub.alwaysLabel) || "Domain";
+  // known casters (Arcane Trickster) learn a fixed list; S.prepared holds the spells they know
+  const knownCaster = (C) => !!(C && C.spellcasting && C.spellcasting.known);
   function spells(D) {
     const c = D.caster;
     if (!c) return `<section class="panel"><p>This character doesn't cast spells.</p></section>`;
@@ -994,14 +1003,14 @@
       <section class="panel">
         <div class="ph"><h2>Spellcasting · ${esc(c.C.name)}</h2>
           <span class="seg" role="group" aria-label="Spell list view">
-            <button data-act="spellView" data-k="prepared" aria-pressed="${UI.spellView === "prepared"}">Prepared</button>
+            <button data-act="spellView" data-k="prepared" aria-pressed="${UI.spellView === "prepared"}">${knownCaster(c.C) ? "Known" : "Prepared"}</button>
             <button data-act="spellView" data-k="all" aria-pressed="${UI.spellView === "all"}">Full ${esc(c.C.name.toLowerCase())} list</button>
           </span></div>
         <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px" class="small">
           <span><span class="label">Ability</span> <b>${ABIL_NAME[c.ability]}</b></span>
           <span><span class="label">Save DC</span> <b class="num">${c.dc}</b></span>
           <span><span class="label">Attack</span> <b class="num">${sg(c.atk)}</b></span>
-          <span><span class="label">Prepared</span> <b class="num" style="color:${prepCount > c.prepMax ? "var(--bad)" : "inherit"}">${prepCount} / ${c.prepMax}</b> <span class="muted">+ ${c.domain.length} ${esc(alwaysLabel(c).toLowerCase())}</span></span>
+          <span><span class="label">${knownCaster(c.C) ? "Known" : "Prepared"}</span> <b class="num" style="color:${prepCount > c.prepMax ? "var(--bad)" : "inherit"}">${prepCount} / ${c.prepMax}</b>${c.domain.length || !knownCaster(c.C) ? ` <span class="muted">+ ${c.domain.length} ${esc(alwaysLabel(c).toLowerCase())}</span>` : ""}</span>
         </div>
         <div class="slots">${slots}</div>
         <p class="small muted" style="margin:10px 0 0">Click a slot to mark it used. A long rest restores every slot. ${c.sub && c.sub.healBonus ? "Healing results include Disciple of Life." : ""}</p>
@@ -1017,7 +1026,7 @@
     const box = sp.level === 0
       ? `<input type="checkbox" class="chk" data-act="toggleCantrip" data-name="${esc(sp.name)}" ${prep ? "checked" : ""} aria-label="Know ${esc(sp.name)}">`
       : dom ? `<span title="Always prepared" style="color:var(--bronze);text-align:center">◆</span>`
-        : `<input type="checkbox" class="chk" data-act="togglePrep" data-name="${esc(sp.name)}" ${prep ? "checked" : ""} aria-label="Prepare ${esc(sp.name)}">`;
+        : `<input type="checkbox" class="chk" data-act="togglePrep" data-name="${esc(sp.name)}" ${prep ? "checked" : ""} aria-label="${knownCaster(c.C) ? "Know" : "Prepare"} ${esc(sp.name)}">`;
     const effect = effectLine(sp, sp.level, D);
     return `<div class="sp ${prep ? "" : "off"}">
       <div class="sp-head">${box}
@@ -1381,10 +1390,11 @@
     const subPick = !!(C.subclassLevel && nc.level === C.subclassLevel && Object.keys(C.subclasses || {}).length);
     if (subPick) nc.sub = L.sub || "";
     const sub = C.subclasses && C.subclasses[nc.sub];
+    const CC = classDef(L.classId, nc.sub);   // adds the subclass's spellcasting, if it grants any
     const raw = (C.features[nc.level] || []).map((f) => ({ ...f, src: C.name })).concat(sub ? (sub.features[nc.level] || []).map((f) => ({ ...f, src: sub.name })) : []);
     const asi = raw.some((f) => f.asi);
     const bc = before.classes.find((c) => c.id === L.classId);
-    const cantripGain = Math.max(0, (C.cantripsKnown ? C.cantripsKnown[nc.level] : 0) - (bc ? bc.cantrips || 0 : 0));
+    const cantripGain = Math.max(0, (CC.cantripsKnown ? CC.cantripsKnown[nc.level] : 0) - (bc ? bc.cantrips || 0 : 0));
     const F = asi && L.asiMode === "feat" && L.feat && L.feat !== "custom" ? FEAT_LIST().find((x) => x.key === L.feat) : null;
     const total = before.total + 1;
 
@@ -1429,7 +1439,7 @@
     const cantripHome = feats.some((f) => f.cantrip) || !after.caster ? "features" : "spells";
     const cantripNeed = Math.max(0, cantripGain - (L.cantrips || []).filter(Boolean).length);
     need[cantripHome] += cantripNeed;
-    return { before, after, C, sub, nc, had, subPick, feats, newDomain, asi, F, cantripGain, cantripHome, cantripNeed, asiNeed, dragonGains, sim, need };
+    return { before, after, C: CC, sub, nc, had, subPick, feats, newDomain, asi, F, cantripGain, cantripHome, cantripNeed, asiNeed, dragonGains, sim, need };
   }
   function luSteps(P) {
     const st = [["class", "Class"], ["hp", "Hit points"], ["features", "Features"]];
@@ -1484,7 +1494,7 @@
       // hideFuture: homebrew subclass features stay secret until the level is reached
       const showSub = sub && !(sub.hideFuture && l > P.nc.level);
       const names = (C.features[l] || []).map((f) => f.name).concat(showSub ? (sub.features[l] || []).map((f) => f.name) : []);
-      const slots = sc ? slotsFor([{ id: L.classId, level: l }]) : [];
+      const slots = sc ? slotsFor([{ id: L.classId, sub: P.nc.sub, level: l }]) : [];
       const cls = l < P.nc.level ? "past" : l === P.nc.level ? "cur" : "";
       rows.push(`<tr class="${cls}"><td class="num">${l}</td><td class="num">${sg(pbFor(l))}</td><td>${names.map(esc).join(", ") || "—"}</td>${sc ? `<td class="num">${C.cantripsKnown ? C.cantripsKnown[l] : "–"}</td>${[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => `<td class="num">${slots[i] || "–"}</td>`).join("")}` : ""}</tr>`);
     }
@@ -1622,15 +1632,15 @@
         <div class="tw"><table class="t prog"><thead><tr><th></th>${head}</tr></thead><tbody><tr><td class="label">Now</td>${rowB}</tr><tr><td class="label">Level ${P.after.total}</td>${rowA}</tr></tbody></table></div>
         ${newLevel ? `<p style="margin:6px 0 0"><span class="chip ok">New</span> You can now cast <b>${ORD[newLevel]}-level</b> spells.</p>` : ""}</div>
       <div class="opt-grid">
-        <div class="result"><span class="label">Spells you can prepare</span><div class="diff" style="font-size:1.2rem">${b ? b.prepMax : 0} → <span class="to">${a.prepMax}</span></div><span class="small muted">${ABIL_NAME[a.ability]} modifier + ${esc(P.C.prepLabel || P.C.name.toLowerCase() + " level")}</span></div>
+        <div class="result"><span class="label">${knownCaster(P.C) ? "Spells you know" : "Spells you can prepare"}</span><div class="diff" style="font-size:1.2rem">${b ? b.prepMax : 0} → <span class="to">${a.prepMax}</span></div><span class="small muted">${knownCaster(P.C) ? esc(P.C.prepLabel) : `${ABIL_NAME[a.ability]} modifier + ${esc(P.C.prepLabel || P.C.name.toLowerCase() + " level")}`}</span></div>
         <div class="result"><span class="label">Spell save DC</span><div class="diff" style="font-size:1.2rem">${b ? b.dc : "—"} → <span class="to">${a.dc}</span></div><span class="small muted">8 + proficiency + ${ABIL_NAME[a.ability]}</span></div>
         <div class="result"><span class="label">Spell attack</span><div class="diff" style="font-size:1.2rem">${b ? sg(b.atk) : "—"} → <span class="to">${sg(a.atk)}</span></div><span class="small muted">proficiency + ${ABIL_NAME[a.ability]}</span></div>
       </div>
       ${P.newDomain.length ? `<p style="margin:0"><b>New ${esc(alwaysLabel(a).toLowerCase())} spells</b> (always prepared): ${P.newDomain.map(esc).join(", ")}</p>` : ""}
       ${P.cantripHome === "spells" && P.cantripGain ? `<div class="fcard ${P.cantripNeed ? "need" : ""}"><div class="fbody">${needBadge(P.cantripNeed)}${cantripChoice(P, L)}</div></div>` : ""}
-      <div><div class="ph"><h3 style="color:var(--bronze)">Prepared spells <span class="small muted" style="font-family:var(--f-body)">optional</span></h3>
-          <span class="chip ${count > a.prepMax ? "warn" : count === a.prepMax ? "ok" : ""}">${count} / ${a.prepMax} prepared</span></div>
-        <p class="small muted" style="margin:0">Want to try the new spells? Adjust your list here, or leave it and change it after your next long rest.</p>${groups}</div>`;
+      <div><div class="ph"><h3 style="color:var(--bronze)">${knownCaster(P.C) ? "Spells known" : `Prepared spells <span class="small muted" style="font-family:var(--f-body)">optional</span>`}</h3>
+          <span class="chip ${count > a.prepMax ? "warn" : count === a.prepMax ? "ok" : ""}">${count} / ${a.prepMax} ${knownCaster(P.C) ? "known" : "prepared"}</span></div>
+        <p class="small muted" style="margin:0">${knownCaster(P.C) ? esc(P.C.knownTip || "Tick the spells you learn at this level. You can also swap one spell you know for another.") : "Want to try the new spells? Adjust your list here, or leave it and change it after your next long rest."}</p>${groups}</div>`;
   }
 
   /* step 5: dragon */
