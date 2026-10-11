@@ -77,7 +77,32 @@ window.DRAGON_KINDS = {
       "Roleplay Dynamic": "Corbin's shield-brother. It has no interest in political intrigue or academic study of the Weavers. It respects strength, discipline and a hard-won victory, and bonds over the battlefield: the clash of steel, tactical positioning, and triumph against superior odds."
     }
   },
-  crystal:  { title: "Crystal Dragon",  family: "Gem",       damageType: "radiant or necrotic", breath: { shape: "15-foot cone", effect: "On a failed save, the target is blinded until the end of its next turn." } },
+  /* Crystal Hatchling (Haratio). Numbers from the DM's stat card. While Haratio is corrupted by
+     his dark urges (toggle on the Dragon tab), the breath and Bioluminescent Truth change. */
+  crystal: {
+    title: "Crystal Dragon", family: "Gem",
+    abilities: { str: 14, dex: 10, con: 15, int: 10, wis: 12, cha: 14 },
+    saveBonus: { dex: true, con: true, wis: true, cha: true },
+    speed: "30 ft., fly 40 ft., burrow 15 ft.",
+    immunities: "Radiant",
+    senses: "Blindsight 10 ft., Darkvision 60 ft.",
+    damageType: "radiant",
+    bite: { dice: "1d6", type: "piercing", reach: "5 ft." },
+    breath: {
+      name: "Radiant Breath", recharge: "5–6", shape: "15-foot cone of starlight", save: "con",
+      effect: "On a failure the creature is also blinded until the end of its next turn. On a success it takes half damage and isn't blinded."
+    },
+    corrupt: {
+      label: "Dark urges", damageType: "necrotic",
+      hint: "Turn on while Haratio is corrupted by his dark urges. The breath turns necrotic and frightens, and the dragon's light turns violet-black.",
+      breath: { name: "Radiant Breath (corrupted)", effect: "On a failure the creature is frightened (instead of blinded) until the end of its next turn. On a success it takes half damage and isn't frightened." }
+    },
+    features: [
+      { level: 3, name: "Bioluminescent Truth", kind: "Bonus action",
+        text: () => "The dragon sheds bright daylight in a 15-foot radius, revealing invisible creatures and illusions.",
+        corruptText: () => "The dragon's light turns violet-black: it extinguishes non-magical flames within 15 feet and fills the area with magical dim light instead of revealing the invisible." }
+    ]
+  },
   copper:   { title: "Copper Dragon",   family: "Metallic",  damageType: "acid",     breath: { shape: "15-foot cone", effect: "On a failed save, the ground in the area becomes difficult terrain for 1 round." } },
   /* Ametrin (Breya). Numbers from the DM's party sheet and Breya's Quest Portal card. */
   amethyst: {

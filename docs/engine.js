@@ -134,6 +134,7 @@
     });
     if (!n) return [];
     let lvl = full + Math.floor(half / 2) + Math.floor(third / 3);
+    if (n === 1 && only.level < (CLASSES[only.id].spellcasting.firstSlotLevel || 1)) return [];
     if (n === 1) { const p = CLASSES[only.id].spellcasting.progression; lvl = p === "full" ? only.level : p === "half" ? Math.ceil(only.level / 2) : Math.ceil(only.level / 3); }
     return (SLOTS_FULL[Math.min(20, lvl)] || []).slice();
   }
@@ -251,7 +252,10 @@
     return out;
   }
   function deriveDragon(s, total, riderPB, bonus = { ac: 0, why: [] }) {
-    const K = DRAGON_KINDS[s.dragon.kind] || {};
+    // corrupt: a kind whose breath and features change while the rider is corrupted (Crystal / Haratio's dark urges)
+    const K0 = DRAGON_KINDS[s.dragon.kind] || {};
+    const corrupted = !!(K0.corrupt && s.dragon.corrupted);
+    const K = corrupted ? { ...K0, damageType: K0.corrupt.damageType || K0.damageType, breath: { ...K0.breath, ...(K0.corrupt.breath || {}) } } : K0;
     const ab = s.dragon.abilities || K.abilities || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
     const m = {}; ABIL.forEach((a) => (m[a] = mod(ab[a])));
     const tier = dragonTier(total); const pb = tier.pb;
@@ -262,7 +266,7 @@
     const essence = sizes.indexOf(tier.size) >= unlockIdx && unlockIdx >= 0;
     const unlockTier = DRAGON_RULES.tiers[unlockIdx];
     return {
-      K, ab, m, tier, pb, hpMax, essence, unlockLevel: unlockTier ? unlockTier.level : null,
+      K, corrupted, ab, m, tier, pb, hpMax, essence, unlockLevel: unlockTier ? unlockTier.level : null,
       essenceMax: DRAGON_RULES.essence.pool(riderPB, total),
       acBase: DRAGON_RULES.acBase + pb,
       ac: DRAGON_RULES.acBase + pb + bonus.ac, acWhy: bonus.why,
@@ -270,7 +274,7 @@
       biteHit: m.str + pb,
       save: (k) => m[k] + (K.saveBonus && K.saveBonus[k] ? pb : 0),
       pp: 10 + m.wis,
-      feats: (K.features || []).filter((f) => total >= f.level).map((f) => ({ ...f, text: typeof f.text === "function" ? f.text(ctx, s.name.split(" ")[0]) : f.text }))
+      feats: (K.features || []).filter((f) => total >= f.level).map((f) => { const t = corrupted && f.corruptText ? f.corruptText : f.text; return { ...f, text: typeof t === "function" ? t(ctx, s.name.split(" ")[0]) : t }; })
     };
   }
   const SPELL_INDEX = {};
@@ -982,7 +986,7 @@
     for (let L = 0; L <= Math.max(0, D.maxSpellLevel); L++) {
       const items = list.filter((sp) => sp.level === L && show(sp));
       const extra = S.extraSpells.map((x, i) => ({ ...x, i })).filter((x) => +x.level === L);
-      if (!items.length && !extra.length && L > 0) continue;
+      if (!items.length && !extra.length && (L > 0 || !c.C.cantripsKnown)) continue;
       const head = L === 0 ? `Cantrips <span class="small muted">${S.cantrips.length} / ${c.cantrips} known</span>` : `${ORD[L]} level <span class="small muted">${D.slots[L - 1] - S.slotsUsed[L]} of ${D.slots[L - 1]} slots left</span>`;
       html += `<div class="splevel"><h3>${head}</h3>${items.map((sp) => spellRow(sp, c, D)).join("")}${extra.map((x) => extraRow(x)).join("")}</div>`;
     }
@@ -1061,6 +1065,10 @@
   function features(D) {
     const res = D.resources.map((r) => {
       const used = S.resUsed[r.id] || 0;
+      // pool: a pool of points (Lay on Hands) spent in any amount, not a row of pips
+      if (r.pool) return `<div class="res"><div><b>${esc(r.name)}</b> <span class="small muted">long rest</span>${r.note ? `<div class="small muted">${esc(r.note)}</div>` : ""}</div>
+        <div class="choice"><span class="num"><b>${r.max - used}</b> / ${r.max}</span><input id="pool-${r.id}" class="f n" type="number" min="1" max="${r.max}" placeholder="0" aria-label="${esc(r.name)} amount" style="width:4.5em">
+          <button class="btn sm" data-act="poolSpend" data-id="${r.id}">Spend</button><button class="btn sm" data-act="poolSpend" data-id="${r.id}" data-k="back">Give back</button></div></div>`;
       return `<div class="res"><div><b>${esc(r.name)}</b> <span class="small muted">${r.reset === "short" ? "short or long rest" : "long rest"}</span>${r.note ? `<div class="small muted">${esc(r.note)}</div>` : ""}</div>
         <span class="pips">${Array.from({ length: r.max }, (_, j) => `<button class="pip slot ${used > j ? "on" : ""}" data-act="res" data-id="${r.id}" data-j="${j}" aria-label="${esc(r.name)} use ${j + 1}"></button>`).join("")}</span></div>`;
     }).join("");
@@ -1108,6 +1116,8 @@
               <button class="btn sm" data-act="dhp" data-k="dmg">Damage</button><button class="btn sm" data-act="dhp" data-k="heal">Heal</button><button class="btn sm" data-act="dhp" data-k="temp">Temp</button></div>
             <div class="hp-bar"><i style="width:${Math.max(0, cur / g.hpMax * 100)}%;background:var(--arc)"></i></div>
           </div>
+          ${K.corrupt ? `<div class="res"><div><b>${esc(K.corrupt.label)}</b><div class="small muted">${esc(K.corrupt.hint)}</div></div>
+            <button class="btn sm ${g.corrupted ? "danger" : ""}" data-act="corruptToggle" aria-pressed="${g.corrupted}">${g.corrupted ? "Corrupted" : "Not corrupted"}</button></div>` : ""}
           <div class="res"><div><b>${esc(K.breath ? K.breath.name || "Breath Weapon" : "Breath Weapon")}</b> <span class="small muted">recharge ${esc(K.breath && K.breath.recharge || "5–6")}</span></div>
             <div class="choice">${dS.breathReady ? `<span class="chip ok">Ready</span><button class="btn sm arc" data-act="breath">Breathe</button>`
               : `<span class="chip warn">Spent</span>
@@ -1365,8 +1375,11 @@
     const C = CLASSES[L.classId];
     const had = S.classes.find((c) => c.id === L.classId);
     const nextClasses = had ? S.classes.map((c) => (c.id === L.classId ? { ...c, level: c.level + 1 } : c))
-      : S.classes.concat([{ id: L.classId, sub: Object.keys(C.subclasses || {})[0], level: 1 }]);
+      : S.classes.concat([{ id: L.classId, sub: (C.subclassLevel || 1) > 1 ? "" : Object.keys(C.subclasses || {})[0], level: 1 }]);
     const nc = nextClasses.find((c) => c.id === L.classId);
+    // subclassLevel: the subclass (a paladin's Sacred Oath) is picked in this wizard when that level is reached
+    const subPick = !!(C.subclassLevel && nc.level === C.subclassLevel && Object.keys(C.subclasses || {}).length);
+    if (subPick) nc.sub = L.sub || "";
     const sub = C.subclasses && C.subclasses[nc.sub];
     const raw = (C.features[nc.level] || []).map((f) => ({ ...f, src: C.name })).concat(sub ? (sub.features[nc.level] || []).map((f) => ({ ...f, src: sub.name })) : []);
     const asi = raw.some((f) => f.asi);
@@ -1412,11 +1425,11 @@
       else if (!F) asiNeed = 1;
       else if (F.abil && (F.abil === "any" || F.abil.length > 1) && !L.featAbil) asiNeed = 1;
     }
-    need.features += asiNeed;
+    need.features += asiNeed + (subPick && !L.sub ? 1 : 0);
     const cantripHome = feats.some((f) => f.cantrip) || !after.caster ? "features" : "spells";
     const cantripNeed = Math.max(0, cantripGain - (L.cantrips || []).filter(Boolean).length);
     need[cantripHome] += cantripNeed;
-    return { before, after, C, sub, nc, had, feats, newDomain, asi, F, cantripGain, cantripHome, cantripNeed, asiNeed, dragonGains, sim, need };
+    return { before, after, C, sub, nc, had, subPick, feats, newDomain, asi, F, cantripGain, cantripHome, cantripNeed, asiNeed, dragonGains, sim, need };
   }
   function luSteps(P) {
     const st = [["class", "Class"], ["hp", "Hit points"], ["features", "Features"]];
@@ -1473,7 +1486,7 @@
       const names = (C.features[l] || []).map((f) => f.name).concat(showSub ? (sub.features[l] || []).map((f) => f.name) : []);
       const slots = sc ? slotsFor([{ id: L.classId, level: l }]) : [];
       const cls = l < P.nc.level ? "past" : l === P.nc.level ? "cur" : "";
-      rows.push(`<tr class="${cls}"><td class="num">${l}</td><td class="num">${sg(pbFor(l))}</td><td>${names.map(esc).join(", ") || "—"}</td>${sc ? `<td class="num">${C.cantripsKnown[l]}</td>${[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => `<td class="num">${slots[i] || "–"}</td>`).join("")}` : ""}</tr>`);
+      rows.push(`<tr class="${cls}"><td class="num">${l}</td><td class="num">${sg(pbFor(l))}</td><td>${names.map(esc).join(", ") || "—"}</td>${sc ? `<td class="num">${C.cantripsKnown ? C.cantripsKnown[l] : "–"}</td>${[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => `<td class="num">${slots[i] || "–"}</td>`).join("")}` : ""}</tr>`);
     }
     return `<div class="choice"><label class="label" for="lu-class">Class to advance</label>
         <select id="lu-class" class="f" style="width:auto" data-lu="classId">${classOpts}</select></div>
@@ -1517,6 +1530,12 @@
       if (f.cantrip && P.cantripHome === "features") { need = P.cantripNeed; choice = cantripChoice(P, L); }
       return featCard("f" + i, f.name, `${f.src} · Level ${P.nc.level}`, f.text, need, choice, L);
     });
+    if (P.subPick) {
+      const label = P.C.subclassLabel || "Subclass"; const subs = P.C.subclasses;
+      const sel = `<select id="lu-sub" class="f" data-lu="sub" aria-label="Choose your ${esc(label.toLowerCase())}"><option value="">Choose…</option>${Object.keys(subs).map((k) => `<option value="${k}" ${L.sub === k ? "selected" : ""}>${esc(subs[k].name)}</option>`).join("")}</select>
+        ${Object.keys(subs).map((k) => `<p class="small" style="margin:6px 0 0;${L.sub === k ? "" : "opacity:.75"}"><b>${esc(subs[k].name)}${subs[k].source ? ` <span class="muted">(${esc(subs[k].source)})</span>` : ""}:</b> ${esc(subs[k].blurb || "")}</p>`).join("")}`;
+      cards.unshift(featCard("sub", `Choose your ${label}`, `${P.C.name} · Level ${P.nc.level}`, `Choose your ${label.toLowerCase()}. It grants features now and at later levels. To change it later, undo this level-up from Options and pick again.`, L.sub ? 0 : 1, sel, L));
+    }
     if (P.after.pb !== P.before.pb) cards.push(featCard("pb", "Proficiency Bonus Increase", `Every character · Level ${P.after.total}`,
       `Your proficiency bonus rises from ${sg(P.before.pb)} to ${sg(P.after.pb)}. Every skill, save and attack you're proficient in improves by 1${P.after.caster ? ", and so do your spell save DC and spell attack" : ""}.`, 0, "", L));
     if ([5, 11, 17].includes(P.after.total) && P.after.caster) cards.push(featCard("ct", "Cantrip Damage Increase", `Every caster · Level ${P.after.total}`,
@@ -1666,6 +1685,7 @@
     next.hp.current = Math.max(0, S.hp.current + (P.after.hpMax - P.before.hpMax));
     if (next.dragon.hpCurrent != null) next.dragon.hpCurrent += P.after.dragon.hpMax - P.before.dragon.hpMax;
     const summary = [`${P.C.name} ${P.nc.level}`];
+    if (P.subPick && P.sub) summary.push(P.sub.name);
     const ab = ABIL.filter((a) => next.abilities[a] !== S.abilities[a]).map((a) => `${a.toUpperCase()} ${S.abilities[a]}→${next.abilities[a]}`);
     if (P.asi && MODAL.asiMode === "feat") summary.push("Feat: " + (P.F ? P.F.name : MODAL.customName));
     if (ab.length) summary.push(ab.join(", "));
@@ -1891,6 +1911,13 @@
       else { $("#rch-roll").value = ""; toast(`Rolled ${n}: not yet`, "It recharges on a 5 or 6. Try again next turn."); }
     },
     breathReset: () => { S.dragon.breathReady = true; commit(); },
+    corruptToggle: () => { S.dragon.corrupted = !S.dragon.corrupted; commit(); },
+    poolSpend: (e) => {
+      const r = derive().resources.find((x) => x.id === e.dataset.id); if (!r) return;
+      const back = e.dataset.k === "back"; const el = $("#pool-" + r.id); const n = Math.round(+(el && el.value));
+      if (!(n > 0)) { toast("Enter an amount", `How many ${r.unit || "points"} to ${back ? "give back" : "spend"}?`); return; }
+      const u = S.resUsed[r.id] || 0; S.resUsed[r.id] = back ? Math.max(0, u - n) : Math.min(r.max, u + n); commit();
+    },
     guard: () => {
       const g = derive().dragon; const f = g.feats.find((x) => x.kind === "Reaction"); if (!f) return;
       S.dragon.guardUsed = true; commit();
@@ -2105,7 +2132,7 @@
       return;
     }
     setPath(MODAL, k, v);
-    if (k === "classId") { MODAL.hpVal = null; MODAL.hpMode = null; MODAL.cantrips = []; }
+    if (k === "classId") { MODAL.hpVal = null; MODAL.hpMode = null; MODAL.cantrips = []; MODAL.sub = ""; }
     if (k === "feat") MODAL.featAbil = "";
   }
   function readVal(el) {
