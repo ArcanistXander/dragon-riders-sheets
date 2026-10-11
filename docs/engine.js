@@ -320,7 +320,7 @@
     S.hitDiceUsed = Math.max(0, S.hitDiceUsed - Math.max(1, Math.floor(D.total / 2)));
     S.death = { s: 0, f: 0 }; S.concentration = "";
     Object.values(S.panels || {}).forEach((p) => { p.used = {}; });
-    S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0;
+    S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0; S.dragon.used = {};
   }
   function dmSeen() { if (!S.dm) S.dm = { hp: {}, cond: {}, rest: "" }; return S.dm; }
   /* "Resistance: poison" · "fire resist" · "immune to cold" → "resist" | "immune" | "" for one damage type */
@@ -560,8 +560,8 @@
       <div class="stat" style="cursor:pointer" data-act="rollInit"><span class="label">Initiative</span><span class="v">${sg(D.init)}</span></div>
       <div class="stat"><span class="label">Speed</span><span class="v" style="${D.speed !== D.baseSpeed ? "color:var(--bad)" : ""}">${D.speed}<small style="font-size:.9rem"> ft</small></span>${D.speed !== D.baseSpeed ? `<span class="small muted">normally ${D.baseSpeed}</span>` : ""}</div>
       ${tile("Proficiency", sg(D.pb))}
-      ${tile("Spell DC", c ? c.dc : "—")}
-      ${tile("Spell attack", c ? sg(c.atk) : "—")}
+      ${c ? tile("Spell DC", c.dc) + tile("Spell attack", sg(c.atk))
+        : D.classes.flatMap((cl) => (cl.C.tiles ? cl.C.tiles(cl.ctx) : [])).concat([["Passive Perception", D.passive("perception", "wis")], ["Passive Insight", D.passive("insight", "wis")]]).slice(0, 2).map(([l, v]) => tile(l, v)).join("")}
       <div class="stat toggle ${S.inspiration ? "on" : ""}" data-act="inspire" role="button" aria-pressed="${S.inspiration}"><span class="label">Inspiration</span><span class="v">${S.inspiration ? "★" : "☆"}</span></div>
       <div class="stat" title="Homebrew: up to 3 hero points"><span class="label">Hero points</span>
         <span class="pips" style="justify-content:center;margin-top:4px">${[0, 1, 2].map((j) => `<button class="pip hero ${S.heroPoints > j ? "on" : ""}" data-act="hero" data-j="${j}" aria-label="Hero point ${j + 1}${S.heroPoints > j ? " (available)" : " (empty)"}"></button>`).join("")}</span>
@@ -590,6 +590,7 @@
   }
   function tabs(D) {
     const T = [["overview", "Overview"], ["attacks", "Attacks"], ["spells", "Spells"], ["features", "Features"]];
+    if (!D.caster && !(S.extraSpells || []).length) T.splice(2, 1); // non-casters skip the Spells tab
     const pn = panelsFor(D);
     if (pn.length) T.push(["panels", window.DEFAULT_CHARACTER.panelsTab || pn.map((x) => x.P.title).join(" & ")]);
     T.push(["dragon", "Dragon bond"], ["inventory", "Inventory"], ["story", "Story & art"]);
@@ -598,6 +599,7 @@
   }
   function page(D) {
     if (UI.tab === "panels" && !panelsFor(D).length) return overview(D);
+    if (UI.tab === "spells" && !D.caster && !(S.extraSpells || []).length) return overview(D);
     return ({ overview, attacks, spells, features, panels, dragon, inventory, story }[UI.tab] || overview)(D);
   }
 
@@ -879,11 +881,12 @@
           <div class="choice" style="margin-top:8px"><button class="btn sm primary" data-act="addWeapon">Add weapon</button><button class="btn sm" data-act="addAttack">Custom weapon</button></div>
           <p class="small muted" style="margin:8px 0 0">To-hit and damage are worked out from your scores and proficiencies. Use ✎ to set a magic bonus or change details.</p></section>
         ${ds ? `<section class="panel"><h2>Divine Strike</h2><p style="margin:0">Once on each of your turns, when you hit with a weapon attack, deal an extra <b>${ds.level >= 14 ? "2d8" : "1d8"} radiant</b> damage.</p></section>` : ""}
+        ${D.classes.flatMap((cl) => cl.feats.filter((f) => f.onAttacks)).map((f) => `<section class="panel"><h2>${esc(f.name)}</h2><p style="margin:0">${esc(f.text)}</p></section>`).join("")}
         <section class="panel"><h2>On your turn</h2>
           <dl class="kv small">
             <dt>Move</dt><dd>Up to your speed (${D.speed} ft), split before and after your action.</dd>
             <dt>Action</dt><dd>Attack, Cast a Spell, Dash, Disengage, Dodge, Help, Hide, Ready, Search, or Use an Object.</dd>
-            <dt>Bonus</dt><dd>Only when a feature or spell gives you one, like Healing Word or Spiritual Weapon.</dd>
+            <dt>Bonus</dt><dd>${(() => { const b = D.classes.flatMap((cl) => cl.feats.filter((f) => f.bonusAction)); return b.length ? esc(b.map((f) => f.name + ": " + f.text).join(" ")) : "Only when a feature or spell gives you one, like Healing Word or Spiritual Weapon."; })()}</dd>
             <dt>Reaction</dt><dd>One per round, such as an opportunity attack when an enemy leaves your reach.</dd>
             <dt>Free</dt><dd>Interact with one object, like drawing a weapon or opening a door.</dd>
           </dl></section>
@@ -1051,6 +1054,10 @@
           ${g.feats.filter((f) => f.kind === "Reaction").slice(0, 1).map((f) => `<div class="res"><div><b>${esc(f.name)}</b> <span class="small muted">reaction${f.per === "short" ? " · once per short rest" : ""}</span></div>
             <div class="choice">${dS.guardUsed ? `<span class="chip warn">${f.per === "short" ? "Used · back after a short rest" : "Used this round"}</span><button class="btn sm" data-act="guardReset">Reset</button>`
               : `<button class="btn sm arc" data-act="guard">Use${f.dice ? ` (${f.dice}${sg(f.diceAbil ? g.m[f.diceAbil] : 0)})` : ""}</button>`}</div></div>`).join("")}
+          ${g.feats.filter((f) => f.kind !== "Reaction" && f.per === "long").map((f) => { const used = (dS.used || {})[f.name];
+            return `<div class="res"><div><b>${esc(f.use || f.name)}</b> <span class="small muted">${esc(f.name)} · once per long rest</span></div>
+            <div class="choice">${used ? `<span class="chip warn">Used · back after a long rest</span><button class="btn sm" data-act="dUseReset" data-k="${esc(f.name)}">Reset</button>`
+              : `<button class="btn sm arc" data-act="dUse" data-k="${esc(f.name)}">Use</button>`}</div></div>`; }).join("")}
           <div class="res"><div><b>Bite</b> <span class="small muted">${sg(g.biteHit)} to hit</span></div><button class="btn sm" data-act="bite">${physical() ? "Attack" : "Roll attack"}</button></div>
         </section>
         <section class="panel"><h2>Bond & name</h2>
@@ -1699,6 +1706,8 @@
       const r = roll(f.dice); toast(`${esc(f.name)}: ${esc(verb)} <b class="num">${Math.max(0, r.total + bm)}</b>`, `${f.dice} ${r.detail} ${sg(bm)}`);
     },
     guardReset: () => { S.dragon.guardUsed = false; commit(); },
+    dUse: (e) => { (S.dragon.used = S.dragon.used || {})[e.dataset.k] = true; commit(); },
+    dUseReset: (e) => { (S.dragon.used = S.dragon.used || {})[e.dataset.k] = false; commit(); },
     bite: () => {
       const g = derive().dragon; const K = g.K; const dice = (K.bite ? K.bite.dice : "1d6") + sg(g.m.str).replace("−", "-"); const type = K.bite ? K.bite.type : "piercing";
       if (physical()) { d20("Bite", g.biteHit, "", `Damage on a hit: ${dice} ${type}`); return; }

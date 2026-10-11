@@ -12,6 +12,7 @@ window.CLASSES.rogue = {
   asiLevels: [4, 8, 10, 12, 16, 19],
   multiclassReq: "DEX 13",
   multiclassProfs: "Light armor, one skill from the rogue list, thieves' tools",
+  tiles: (c) => [["Sneak attack", `${Math.ceil(c.lvl / 2)}d6`]],   // replaces the spell tiles a caster would have
   resources: (lvl) => [
     { id: "luck", name: "Stroke of Luck", max: lvl >= 20 ? 1 : 0, reset: "short" }
   ],

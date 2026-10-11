@@ -44,7 +44,7 @@ window.PARTY_DRAGONS = [
   { id: "corbin", rider: "Corbin", dragon: "Bronze Hatchling" },
   { id: "coltyn", rider: "Coltyn", dragon: "Noctoror Sactr" },
   { id: "haratio", rider: "Haratio", dragon: "Crystal Hatchling" },
-  { id: "valkyrie", rider: "Valkyrie", dragon: "Navarre" },
+  { id: "karinya", rider: "Karinya", dragon: "Navarre" },
   { id: "cedrick", rider: "Cedrick", dragon: "Emerald Hatchling" },
   { id: "ra", rider: "Ra", dragon: "Thamior" }
 ];
@@ -101,7 +101,25 @@ window.DRAGON_KINDS = {
         text: (d, rider) => `When a ranged attack targets ${rider}, the dragon bends gravity and the attack roll takes a −2 penalty. Once per short rest.` }
     ]
   },
-  moonstone:{ title: "Moonstone Dragon",family: "Gem",       damageType: "psychic",  breath: { shape: "15-foot cone", effect: "On a failed save, the target is charmed for 1 round and sees the dragon as an ally." } },
+  /* Navarre (Karinya). Numbers from the DM's stat card. */
+  moonstone: {
+    title: "Moonstone Dragon", family: "Gem",
+    abilities: { str: 14, dex: 14, con: 13, int: 14, wis: 9, cha: 16 },
+    saveBonus: { dex: true, con: true, wis: true, cha: true },
+    speed: "30 ft., fly 40 ft.",
+    immunities: "Psychic",
+    senses: "Blindsight 10 ft., Darkvision 60 ft.",
+    damageType: "psychic",
+    bite: { dice: "1d6", type: "piercing", reach: "5 ft." },
+    breath: {
+      name: "Psychic Breath", recharge: "5–6", shape: "15-foot cone of fey energy", save: "wis",
+      effect: "Each creature in the cone makes a Wisdom save, taking the damage and becoming charmed for 1 round on a failure."
+    },
+    features: [
+      { level: 3, name: "Feywild Havoc", kind: "Innate magic", per: "long", use: "Color Spray",
+        text: () => "The dragon manipulates light and sound without components. It can cast Minor Illusion at will, and Color Spray once per long rest." }
+    ]
+  },
   black:    { title: "Black Dragon",    family: "Chromatic", damageType: "acid",     breath: { shape: "15-foot cone", effect: "On a failed save, the acid clings and deals an extra 1d4 acid damage at the start of the target's next turn." } },
   emerald:  { title: "Emerald Dragon",  family: "Gem",       damageType: "psychic",  breath: { shape: "15-foot cone", effect: "On a failed save, the target can't take reactions until the start of its next turn." } }
 };

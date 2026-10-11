@@ -271,7 +271,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
   {"name":"Lightning Breath","recharge":"5-6","text":"20-ft. line, 5 ft. wide. Dex save, DC {dc}: 2d6 lightning on a failure, and the creature loses its reaction until its next turn."},
   {"name":"Lightning Guard","text":"Reaction. When Corbin or an ally within 5 ft. of the dragon is hit by a melee or ranged weapon attack, reduce the damage by 1d6 {con}."}]}},
-{"id":"valkyrie","name":"Valkyrie","race":"","classes":"","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
+{"id":"karinya","name":"Karinya","race":"Half-Elf","classes":"Rogue (Assassin)","level":"3","ac":"","hp":"","speed":"30","fly":"","flyNote":"","sstr":"","sdex":"","scon":"","sint":"","swis":"","scha":"","init":"","pp":"","dc":"","defenses":"","notes":"",
  "dragon":{"name":"Navarre","kind":"Moonstone","color":"#7376c9","size":"Small","speed":"30 ft., fly 40 ft.","str":"14","dex":"14","con":"13","int":"14","wis":"9","cha":"16","saves":"dex,con,wis,cha","defenses":"psychic immune","senses":"Blindsight 10 ft., darkvision 60 ft.","ac":"","hp":"","bond":"1","tactics":[],"aspects":"",
  "features":[
   {"name":"Bite","text":"Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing."},
@@ -301,7 +301,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   var STORE='arcanum-riders-sheet', PLAY='arcanum-riders-play';
   // Riders with their own character sheet on this site. They read it live unless switched to Paper.
   // Add a line here when a new character sheet goes up (rider id: page).
-  var SHEET_PAGES={corbin:'corbin.html',breya:'breya.html'};
+  var SHEET_PAGES={corbin:'corbin.html',breya:'breya.html',karinya:'karinya.html'};
   function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
   function put(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}
   var state=JSON.parse(DEFAULTS);
