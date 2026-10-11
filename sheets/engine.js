@@ -416,6 +416,18 @@
     });
     return out;
   }
+  /* Damage type picker beside the Damage buttons. The pick sticks (UI.dmgType) so a run of hits of one type is quick;
+     options the character resists or ignores are marked so players see what will be halved. */
+  const DMG_TYPES = ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+  function dmgTypeSelect(id, who) {
+    const cur = (UI.dmgType || {})[who] || "";
+    const K = who === "dragon" ? derive().dragon.K : null;
+    const text = K ? (K.immunities ? K.immunities + " immune" : "") : S.defenses;
+    const opt = (v, n) => `<option value="${v}" ${cur === v ? "selected" : ""}>${n}</option>`;
+    return `<select id="${id}" class="f" data-act-input="dmgType" data-who="${who}" aria-label="Damage type" style="width:auto;min-width:0">${opt("", "Any type")}${DMG_TYPES.map((t) => {
+      const r = defenseFor(text, t); return opt(t, t[0].toUpperCase() + t.slice(1) + (r === "immune" ? " (immune)" : r === "resist" ? " (resist, ½)" : ""));
+    }).join("")}</select>`;
+  }
   function dmHp(c, dragon) {
     const D = derive(), amt = Math.max(0, Math.floor(+c.amt || 0)), type = c.type && c.type !== "untyped" ? String(c.type) : "";
     if (dragon) {
@@ -654,6 +666,7 @@
         <div><span class="label">Hit points</span><div class="hp-big">${Math.min(S.hp.current, D.hpMax)}<small> / ${D.hpMax}</small>${S.hp.temp ? ` <small style="color:var(--arc)">+${S.hp.temp} temp</small>` : ""}</div></div>
         <div class="hp-ctl">
           <input id="hp-amt" class="f n" type="number" min="0" inputmode="numeric" aria-label="Amount" placeholder="0">
+          ${dmgTypeSelect("hp-type", "rider")}
           <button class="btn sm" data-act="hp" data-k="dmg">Damage</button>
           <button class="btn sm" data-act="hp" data-k="heal">Heal</button>
           <button class="btn sm" data-act="hp" data-k="temp">Temp</button>
@@ -1150,7 +1163,7 @@
           <div class="hp" style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:center">
             <div><span class="label">Dragon HP</span><div class="hp-big">${cur}<small> / ${g.hpMax}</small>${dS.hpTemp ? ` <small style="color:var(--arc)">+${dS.hpTemp} temp</small>` : ""}</div></div>
             <div class="hp-ctl"><input id="dhp-amt" class="f n" type="number" min="0" aria-label="Dragon HP amount" placeholder="0">
-              <button class="btn sm" data-act="dhp" data-k="dmg">Damage</button><button class="btn sm" data-act="dhp" data-k="heal">Heal</button><button class="btn sm" data-act="dhp" data-k="temp">Temp</button></div>
+              ${dmgTypeSelect("dhp-type", "dragon")}<button class="btn sm" data-act="dhp" data-k="dmg">Damage</button><button class="btn sm" data-act="dhp" data-k="heal">Heal</button><button class="btn sm" data-act="dhp" data-k="temp">Temp</button></div>
             <div class="hp-bar"><i style="width:${Math.max(0, cur / g.hpMax * 100)}%;background:var(--arc)"></i></div>
           </div>
           ${K.corrupt ? `<div class="res"><div><b>${esc(K.corrupt.label)}</b><div class="small muted">${esc(K.corrupt.hint)}</div></div>
@@ -1839,9 +1852,9 @@
       const n = Math.max(0, +$("#hp-amt").value || 0); const k = e.dataset.k; if (!n) return;
       const D = derive();
       if (k === "dmg") {
-        const fromTemp = Math.min(S.hp.temp, n); S.hp.temp -= fromTemp; S.hp.current = Math.max(0, S.hp.current - (n - fromTemp));
-        if (S.concentration) toast(`Concentration check`, `CON save DC ${Math.max(10, Math.floor(n / 2))} to keep ${esc(S.concentration)}.`);
-        if (S.hp.current === 0) toast("Down to 0 HP", "Start rolling death saves.");
+        // same path as damage the DM sends from the party sheet: resistances, immunities, temp HP, death saves, concentration
+        const type = ($("#hp-type") || {}).value || "";
+        toast(`${n}${type ? " " + type : ""} damage`, esc(dmHp({ amt: n, type })) + ".", 6000);
       } else if (k === "heal") { S.hp.current = Math.min(D.hpMax, S.hp.current + n); if (S.hp.current > 0) S.death = { s: 0, f: 0 }; }
       else S.hp.temp = Math.max(S.hp.temp, n);
       commit();
@@ -1849,7 +1862,10 @@
     dhp: (e) => {
       const n = Math.max(0, +$("#dhp-amt").value || 0); if (!n) return;
       const g = derive().dragon; let cur = S.dragon.hpCurrent == null ? g.hpMax : S.dragon.hpCurrent;
-      if (e.dataset.k === "dmg") { const t = Math.min(S.dragon.hpTemp, n); S.dragon.hpTemp -= t; cur = Math.max(0, cur - (n - t)); }
+      if (e.dataset.k === "dmg") {
+        const type = ($("#dhp-type") || {}).value || "";
+        toast(`${n}${type ? " " + type : ""} damage`, esc(dmHp({ amt: n, type }, true)) + ".", 6000); commit(); return;
+      }
       else if (e.dataset.k === "heal") cur = Math.min(g.hpMax, cur + n);
       else S.dragon.hpTemp = Math.max(S.dragon.hpTemp, n);
       S.dragon.hpCurrent = cur >= g.hpMax ? null : cur; commit();
@@ -2198,6 +2214,8 @@
     } else if (el.dataset.lu) {
       luField(el);
       renderModal();
+    } else if (el.dataset.actInput === "dmgType") {
+      UI.dmgType = Object.assign({}, UI.dmgType, { [el.dataset.who]: el.value });   // no render: keeps the typed amount
     } else if (el.dataset.actInput === "dragonAbil") {
       const g = derive().dragon; S.dragon.abilities = Object.assign({}, g.ab, { [el.dataset.k]: +el.value || 0 }); commit();
     } else if (el.dataset.upload) {
