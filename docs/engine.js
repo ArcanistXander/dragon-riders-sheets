@@ -380,7 +380,7 @@
     const saves = {}; ABIL.forEach((a) => { saves[a] = D.save(a); });
     const conds = S.conds.slice(); if (S.concentration) conds.push("concentrating");
     const rep = {
-      t: "dr-hero", v: 1, id, name: S.name, at: new Date().toISOString(), restAt: (S.dm && S.dm.rest) || "",
+      t: "dr-hero", v: 1, id, name: S.name, at: new Date().toISOString(), restAt: (S.dm && S.dm.rest) || "", shortDone: (S.dm && S.dm.shortDone) || "",
       live: {
         level: D.total, classes: classLine(D), race: S.race, ac: D.ac, init: D.init, speed: D.speed, pp: D.passive("perception", "wis"),
         dc: c ? c.dc : null, saves, saveProf: S.saveProf.concat(D.fx.saves),
@@ -404,6 +404,12 @@
     S.death = { s: 0, f: 0 }; S.concentration = "";
     Object.values(S.panels || {}).forEach((p) => { p.used = {}; });
     S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0; S.dragon.used = {};
+    if (S.dm && S.dm.shortCall) S.dm.shortDone = S.dm.shortCall; // a long rest covers a short rest the DM called
+  }
+  // The DM called a short rest for the party: open the Short rest window (spending hit dice stays the player's choice).
+  function dmShortRest() {
+    if (!MODAL || MODAL.type === "shortRest") { MODAL = { type: "shortRest", log: (MODAL && MODAL.log) || [] }; renderModal(); }
+    toast("Short rest from the DM", MODAL.type === "shortRest" ? "Spend hit dice if you want, then Finish short rest." : "Press Short rest when you’re ready.", 6000);
   }
   function dmSeen() { if (!S.dm) S.dm = { hp: {}, cond: {}, rest: "" }; return S.dm; }
   /* "Resistance: poison" · "fire resist" · "immune to cold" → "resist" | "immune" | "" for one damage type */
@@ -540,7 +546,13 @@
       if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (changed) persist();
     }, () => {});
     db.doc("party/rest").onSnapshot((s) => {
-      if (!s.exists) return; const at = String((s.data() || {}).at || ""), seen = dmSeen();
+      if (!s.exists) return; const d = s.data() || {}, at = String(d.at || ""), sh = String(d.shortAt || ""), seen = dmSeen();
+      if (sh && sh > (seen.short || "")) {
+        seen.short = sh;
+        // skip a short rest that's hours old (the sheet wasn't open) or one a later long rest already covered
+        if (Date.now() - Date.parse(sh) > 3 * 3600e3 || sh < at) persist();
+        else { seen.shortCall = sh; persist(); dmShortRest(); }
+      }
       if (!at || at <= (seen.rest || "")) return;
       const first = !seen.rest; seen.rest = at;
       if (first && Date.now() - Date.parse(at) > 6 * 3600e3) { persist(); return; } // an old rest from before this sheet linked up
@@ -1753,6 +1765,7 @@
     return `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="sr-title">
       <header><h2 id="sr-title">Short rest</h2><button class="icon-btn" data-act="closeModal" aria-label="Close">✕</button></header>
       <div class="mb">
+        ${S.dm && S.dm.shortCall && S.dm.shortCall !== S.dm.shortDone ? `<p class="small" style="margin:0"><b>The DM called a short rest.</b> Press Finish short rest when you’re done, so the party sheet knows.</p>` : ""}
         <p style="margin:0">Spend hit dice to heal. Each die heals d${hd} ${sg(D.mods.con)} (CON). You have <b>${left}</b> of ${D.total} left. HP: <b>${S.hp.current} / ${D.hpMax}</b>.</p>
         <div class="choice">
           <label class="small" for="hd-roll">Your d${hd} roll</label><input id="hd-roll" class="f n" type="number" min="1" max="${hd}" inputmode="numeric" placeholder="1–${hd}">
@@ -2144,7 +2157,7 @@
       panelsFor(D).forEach(({ P }) => { const st = S.panels[P.id]; if (!st) return; P.options.forEach((o) => { if (o.uses && o.uses.reset === "short" && st.used[o.key]) { st.used[o.key] = 0; back.push({ name: o.name }); } }); });
       if (S.dragon.guardUsed) { const f = D.dragon.feats.find((x) => x.kind === "Reaction"); if (f) back.push({ name: f.name }); }
       D.dragon.feats.filter((f) => f.kind !== "Reaction" && f.per === "short" && (S.dragon.used || {})[f.name]).forEach((f) => { S.dragon.used[f.name] = false; back.push({ name: f.name }); });
-      S.dragon.guardUsed = false; MODAL = null; commit();
+      S.dragon.guardUsed = false; if (S.dm && S.dm.shortCall) S.dm.shortDone = S.dm.shortCall; MODAL = null; commit();
       toast("Short rest finished", back.length ? esc(back.map((r) => r.name).join(", ")) + " restored." : "Hit dice spent; nothing else to restore.");
     },
     finishLong: () => { longRestNow(); MODAL = null; commit(); toast("Long rest finished", "HP, slots and features restored."); },

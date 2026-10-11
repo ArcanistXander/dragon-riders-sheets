@@ -66,6 +66,7 @@
     '.tt-ord li{display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:.92rem}'+
     '.tt-ord li .mk{width:1em;color:var(--tt-acc);font-weight:700}.tt-ord li.cur{background:color-mix(in srgb,var(--tt-acc) 14%,transparent);font-weight:700}'+
     '.tt-ord li.me .nm{color:var(--tt-acc);font-weight:700}.tt-ord li.foe .nm{color:var(--tt-muted)}.tt-ord li.down .nm{text-decoration:line-through}'+
+    '.tt-ord .cd{font-style:italic;font-size:.8em}'+
     '.tt-ord .tg{margin-left:auto;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tt-muted)}'+
     '.tt-root button.tt-tab{border-radius:999px;box-shadow:0 4px 18px rgba(0,0,0,.2);font-weight:700}'+
     '.tt-pill{box-sizing:border-box;max-width:100%;background:var(--tt-bg);border:1px solid var(--tt-rule);border-radius:999px;padding:6px 8px 6px 14px;box-shadow:0 4px 18px rgba(0,0,0,.2);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:.88rem}'+
@@ -92,7 +93,7 @@
     return '<section class="tt-ord" aria-label="Turn order"><header><b>Turn order · round '+round.round+'</b><button data-tt="hide" aria-expanded="true" aria-label="Minimize turn order" title="Minimize">–</button></header>'+
       '<ol>'+L.map(function(o){var me=o.id===ME;
         return '<li class="'+(o.cur?'cur ':'')+(me?'me ':'')+(o.id?'':'foe ')+(o.down?'down':'')+'"'+(o.cur?' aria-current="true"':'')+'><span class="mk" aria-hidden="true">'+(o.cur?'▶':'')+'</span>'+
-          '<span class="nm">'+esc(o.n)+(me?' (you)':'')+'</span>'+(o.held?'<span class="tg">Holding</span>':o.down?'<span class="tg">Down</span>':'')+'</li>'}).join('')+'</ol></section>';
+          '<span class="nm">'+esc(o.n)+(me?' (you)':'')+(o.c&&o.c.length?' <i class="cd">'+esc(o.c.join(', '))+'</i>':'')+'</span>'+(o.held?'<span class="tg">Holding</span>':o.down?'<span class="tg">Down</span>':'')+'</li>'}).join('')+'</ol></section>';
   }
   function draw(){
     mount();

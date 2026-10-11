@@ -238,6 +238,18 @@ input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15r
 .pk-roll{display:flex;gap:6px;align-items:center;white-space:nowrap}
 .pk-roll input{width:auto;accent-color:var(--accent)}
 span.chip{border:1px solid var(--rule);display:inline-block}
+.ini-who .conds.wide{max-width:none}
+.ini-sub button.chip{padding:1px 8px}
+.foes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.foe{display:inline-flex}
+.foe button{padding:2px 8px;font-size:.85rem}
+.foe button:first-child{border-radius:6px 0 0 6px}
+.foe button.x{border-radius:0 6px 6px 0;border-left:0;padding:2px 6px}
+button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
+.encs{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.encs li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;align-items:center;border:1px solid var(--rule);border-radius:6px;padding:6px 10px;background:var(--bg)}
+.encs li>div:first-child{display:grid;gap:2px;min-width:0}
+.encs .b{display:flex;flex-wrap:wrap;gap:6px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -314,7 +326,10 @@ span.chip{border:1px solid var(--rule);display:inline-block}
 
   var AB=['str','dex','con','int','wis','cha'];
   function blankDragon(){return {name:'New dragon',kind:'',color:'#b07a2a',size:'Small',speed:'30 ft., fly 40 ft.',str:'10',dex:'10',con:'10',int:'10',wis:'10',cha:'10',saves:'',defenses:'',senses:'Blindsight 10 ft., darkvision 60 ft.',ac:'',hp:'',bond:'1',tactics:[],aspects:'',features:[{name:'Bite',text:'Melee: {hit} to hit, reach 5 ft. Hit: 1d6 + 2 piercing.'}]}}
-  function fixParty(){state.party.forEach(function(p){if(!p.dragon)p.dragon=blankDragon();if(!Array.isArray(p.dragon.features))p.dragon.features=[];if(!Array.isArray(p.dragon.tactics))p.dragon.tactics=[];})}
+  function fixParty(){state.party.forEach(function(p){if(!p.dragon)p.dragon=blankDragon();if(!Array.isArray(p.dragon.features))p.dragon.features=[];if(!Array.isArray(p.dragon.tactics))p.dragon.tactics=[];});
+    // saved enemies ({key: {name,hp,ac,init,note,leg,lres}}) and saved encounters ([{id,name,foes:[…],lair}]) for the initiative tracker
+    if(!state.foes||typeof state.foes!=='object'||Array.isArray(state.foes))state.foes={};
+    if(!Array.isArray(state.encs))state.encs=[];}
   fixParty();
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -406,7 +421,10 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     Object.keys(pe).forEach(function(k){if(r&&r.at>=pe[k].at)delete pe[k]});
     return pe;
   }
+  // enemies in the initiative tracker ('dm-…') carry their own conditions on their entry
+  function isFoe(id){return /^dm-/.test(id||'')}
   function condOn(id){
+    if(isFoe(id)){var fe=entry(ini(),id);return (fe&&fe.cond)||{}}
     var p=liveRider(id); if(!p) return play.cond[id]||{};
     var out={}, pe=pend(id); (live(p).conds||[]).forEach(function(k){out[k]=true});
     Object.keys(pe).forEach(function(k){if(k!=='exh'&&k!=='insp')out[k]=pe[k].on});
@@ -440,6 +458,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function flushConds(){condQueued=false;if(cloudDb)cloudDb.doc('party/conds').set(dmConds).catch(function(){dmPend={};statusMsg='Couldn’t send that. Check the connection.';render()})}
   // A condition on or off for anyone: a rider on a live sheet gets it through their sheet; everyone else is tracked here.
   function setCondFor(id,c,on){
+    if(isFoe(id)){var fe=entry(ini(),id);if(!fe)return false;(fe.cond||(fe.cond={}))[c]=!!on;savePlay();return true}
     if(liveRider(id))return sendCond(id,c,{on:!!on});
     var o=play.cond[id]||(play.cond[id]={}); o[c]=!!on; savePlay(); return true;
   }
@@ -573,7 +592,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(!(r>0)){statusMsg='Type how many rounds it lasts, or press Until removed.';render();var bx=document.querySelector('[data-cdurn="'+id+'"]');if(bx)bx.focus();return}
     I.fx.push({id:'fx'+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:condDef(c)[1],who:entryOf(id),cond:c,applied:[id],anchor:I.round?I.turn:'',total:r,el:0});
     delete condAsk[id];savePlay();
-    var cr=crit(id);statusMsg=condDef(c)[1]+' on '+(cr?cr.name:id)+' for '+roundsTxt(r)+'. It comes off by itself.';render();
+    statusMsg=condDef(c)[1]+' on '+critName(id)+' for '+roundsTxt(r)+'. It comes off by itself.';render();
   }
   function toggleCond(id,c){
     var on=!condOn(id)[c], cr=crit(id);
@@ -881,7 +900,11 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   // list stays sorted: highest initiative first, ties by tb (set from the initiative modifier, or by moving someone).
   // A timed effect counts down when its anchor's turn starts (the turn it was added on), so it ends just before
   // that turn the right number of rounds later, as in the rules.
+  // Enemies may also carry cond {prone:true…}, leg {max,used} (legendary actions, back at the start of their turn),
+  // lres {max,used} (legendary resistance per day) and hpF (the HP as typed, so a saved encounter rolls dice again).
+  // A lair entry {lair:true} acts on initiative 20 and loses ties.
   var VIEWKEY='arcanum-riders-view', view='party', confirmNewFight=false, fxForm={unit:'1'}, lastRoundKey=null, adding=false, addForm={count:'1',roll:true};
+  var encOpen=false, encForm={roll:true}, encAsk='', condOpen={};
   try{if(localStorage.getItem(VIEWKEY)==='init')view='init'}catch(e){}
   function entry(I,id){return I.list.find(function(e){return e.id===id})||null}
   function ini(){
@@ -898,8 +921,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function hero(e){return e&&e.pc?byId(e.pc)||null:null}
   function eName(e){var p=hero(e);return p?p.name+' / '+dName(p):(e.name||'Enemy')}
   // Timers can be on a rider ('pc-<rider>'), on their dragon alone ('dr-<rider>'), the whole party, or an enemy.
-  function entryOf(cid){return /-dragon$/.test(cid)?'dr-'+cid.slice(0,-7):'pc-'+cid}
-  function turnOf(cid){return 'pc-'+cid.replace(/-dragon$/,'')}
+  function entryOf(cid){return isFoe(cid)?cid:/-dragon$/.test(cid)?'dr-'+cid.slice(0,-7):'pc-'+cid}
+  function turnOf(cid){return isFoe(cid)?cid:'pc-'+cid.replace(/-dragon$/,'')}
   function whoName(I,id){
     var m=/^(pc|dr)-(.+)$/.exec(id||''), p=m&&byId(m[2]);
     if(p)return m[1]==='dr'?dName(p):p.name;
@@ -951,7 +974,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     I.notes={};
     if(nx.wrap){I.round++;I.fx.forEach(function(f){if(!anchored(I,f))fwd(I,f)})}
     I.turn=nx.e.id;
-    if(nx.e.started!==I.round){nx.e.started=I.round;I.fx.forEach(function(f){if(f.anchor===nx.e.id&&anchored(I,f))fwd(I,f)});upkeep(I,nx.e)}
+    if(nx.e.started!==I.round){nx.e.started=I.round;I.fx.forEach(function(f){if(f.anchor===nx.e.id&&anchored(I,f))fwd(I,f)});upkeep(I,nx.e);
+      if(nx.e.leg&&nx.e.leg.used){nx.e.leg.used=0;note(I,nx.e.id,'legendary actions back')}}
   }
   function prevTurn(I){
     var c=entry(I,I.turn), pv=peek(I,-1); if(!pv||(pv.wrap&&I.round<=1)) return;
@@ -966,6 +990,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function fxCond(f){return f.cond||condIdFor(f.name)}
   function fxTargets(I,f){
     if(f.who==='party')return [].concat.apply([],state.party.map(function(p){return [p.id,did(p)]}));
+    if(isFoe(f.who)){var fe=entry(I,f.who);return fe&&!fe.lair?[f.who]:[]}
     var m=/^(pc|dr)-(.+)$/.exec(f.who||''), p=m&&byId(m[2]);
     return p?[m[1]==='dr'?did(p):p.id]:[];
   }
@@ -976,7 +1001,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     want.filter(function(h){return had.indexOf(h)<0}).forEach(function(h){setCondFor(h,c,true)});
     f.applied=want;
   }
-  function critName(cid){var c=crit(cid);return c?c.name:cid}
+  function critName(cid){if(isFoe(cid)){var fe=entry(ini(),cid);return fe?eName(fe):'an enemy'}var c=crit(cid);return c?c.name:cid}
   function note(I,eid,txt){var L=(I.notes||(I.notes={}))[eid]||(I.notes[eid]=[]);if(L.indexOf(txt)<0)L.push(txt)}
   function checkEnds(I){
     I.fx.forEach(function(f){
@@ -1003,7 +1028,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   // Tell the riders' sheets the round and whose turn it is (js/turn.js). turn, next, held and callFor are entry ids, only for
   // riders reading a live sheet; turnName is what players see: enemies show by the name typed in their slot.
   function sheetId(e){var p=e&&hero(e);return p&&hasSheet(p)&&!p.paper?e.id:''}
-  function shownName(e){return e?eName(e):''}
+  function shownName(e){return e?e.lair?'The lair':eName(e):''}
+  function foeConds(e){var on=e&&e.cond||{};return CONDS.filter(function(c){return on[c[0]]&&c[0]!=='concentrating'}).map(function(c){return c[1]})}
   function callFor(I){return I.call&&!I.round?I.list.filter(function(e){return hero(e)&&!rolled(e)}).map(sheetId).filter(Boolean):[]}
   function postRound(){
     var I=ini(), c=I.round?entry(I,I.turn):null, nx=I.round?peek(I,1):null;
@@ -1013,7 +1039,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       notes:c&&sheetId(c)&&I.notes&&I.notes[c.id]?I.notes[c.id]:[],
       call:I.call&&!I.round?I.call.id:'', callFor:callFor(I),
       // the turn order players see on their sheets during combat: who's in the fight, in order
-      order:I.round?I.list.filter(rolled).map(function(e){var o={n:shownName(e)};if(hero(e))o.id=e.id;if(e===c)o.cur=1;if(e.held)o.held=1;if(!hero(e)&&e.hpMax!=null&&e.hp<=0)o.down=1;return o}):[]};
+      order:I.round?I.list.filter(rolled).map(function(e){var o={n:shownName(e)};if(hero(e))o.id=e.id;if(e===c)o.cur=1;if(e.held)o.held=1;if(!hero(e)&&e.hpMax!=null&&e.hp<=0)o.down=1;var fc=hero(e)?[]:foeConds(e);if(fc.length)o.c=fc;return o}):[]};
     var key=JSON.stringify(doc);
     if(!cloudDb||key===lastRoundKey) return; lastRoundKey=key;
     doc.at=new Date().toISOString();
@@ -1037,8 +1063,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(!I.round||d.cid!==I.cid||+d.round!==I.round)return;
     var e=entry(I,d.entry); if(!e||hero(e)!==p)return;
     if((d.act==='end'||d.act==='hold')&&I.turn===e.id){
-      initGo(function(I){if(d.act==='end')nextTurn(I);else holdTurn(I,e.id)});
-      statusMsg=eName(e)+(d.act==='end'?' ended their turn.':' is holding their turn.');render();
+      statusMsg='';initGo(function(I){if(d.act==='end')nextTurn(I);else holdTurn(I,e.id)});
+      statusMsg=eName(e)+(d.act==='end'?' ended their turn.':' is holding their turn.')+(statusMsg?' '+statusMsg:'');render();
     } else if(d.act==='act'&&e.held){
       initGo(function(I){actNow(I,e.id)});statusMsg=eName(e)+' acts now.';render();
     }
@@ -1061,10 +1087,15 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function initRow(I,e,c,active){
     var isCur=active&&c===e, r=rolled(e), p=hero(e), m=initMod(e), sub=[];
     var rl=I.list.filter(rolled), ri=rl.indexOf(e);
-    if(!p){
+    if(e.lair)sub.push('<span class="tag dm">Lair</span><span>Initiative 20, loses ties</span>');
+    else if(!p){
       sub.push('<span class="tag dm">Enemy</span>');
       if(e.hpMax!=null&&e.hp<=0)sub.push('<span class="tag down">Down</span>');
       if(e.s&&e.s.ac)sub.push('<span class="st">AC <b>'+esc(e.s.ac)+'</b></span>');
+      var on=e.cond||{};
+      CONDS.filter(function(cd){return on[cd[0]]}).forEach(function(cd){sub.push('<button class="chip on" data-cond="'+e.id+'" data-c="'+cd[0]+'" title="'+esc(cd[2])+' (click to remove)" aria-label="Remove '+esc(cd[1])+' from '+esc(e.name)+'">'+esc(cd[1])+' ✕</button>')});
+      if(e.leg&&e.leg.max)sub.push('<span class="st" title="Legendary actions: one at the end of another creature’s turn. They come back at the start of its turn.">Legendary <b>'+(e.leg.max-(e.leg.used||0))+'</b>/'+e.leg.max+'</span>'+pips('leg',e.id,e.leg.max,e.leg.max-(e.leg.used||0),'',e.name+' legendary actions'));
+      if(e.lres&&e.lres.max)sub.push('<span class="st" title="Legendary resistance: turn a failed save into a success. Per day.">Leg. resist <b>'+(e.lres.max-(e.lres.used||0))+'</b>/'+e.lres.max+'</span>'+pips('lres',e.id,e.lres.max,e.lres.max-(e.lres.used||0),'f',e.name+' legendary resistance'));
     }
     if(e.held)sub.push('<span class="tag hold">Holding</span>');
     if(m!=null)sub.push('<span class="st">Init <b>'+sg(m)+'</b></span>');
@@ -1089,11 +1120,15 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(r)act+='<button class="step" data-iup="'+e.id+'"'+(ri<=0?' disabled':'')+' aria-label="Move '+esc(eName(e))+' up" title="Move up">↑</button><button class="step" data-idown="'+e.id+'"'+(ri>=rl.length-1?' disabled':'')+' aria-label="Move '+esc(eName(e))+' down" title="Move down">↓</button>';
     if(isCur&&I.list.filter(inTurn).length>1)act+='<button data-ihold="'+e.id+'" title="Ready an action or wait: step out of the order until they act">Hold turn</button>';
     if(e.held)act+=(active?'<button class="primary" data-iact="'+e.id+'" title="Acts now, before '+esc(c?eName(c):'')+', and keeps this spot from now on">Act now</button>':'')+'<button class="ghost" data-iunhold="'+e.id+'">Back in place</button>';
+    var copen=!p&&!e.lair&&(condOpen[e.id]||condAsk[e.id]);
+    if(!p&&!e.lair)act+='<button data-iconds="'+e.id+'" aria-expanded="'+!!copen+'" title="Put a condition on '+esc(e.name)+'">Conditions</button>';
     if(!p)act+='<button class="ghost" data-idel="'+e.id+'" aria-label="Remove '+esc(eName(e))+'">Remove</button>';
     var mhp='';
+    if(copen)mhp+='<div class="conds wide">'+CONDS.map(function(cd){var o=!!(e.cond||{})[cd[0]];
+      return '<button class="chip'+(cd[0]==='concentrating'?' good':'')+(o?' on':'')+'" data-cond="'+e.id+'" data-c="'+cd[0]+'" aria-pressed="'+o+'" title="'+esc(cd[2])+'">'+cd[1]+'</button>'}).join('')+'</div>'+durAsk(e.id);
     if(!p&&e.hpMax!=null){
       var pct=e.hpMax>0?Math.max(0,Math.min(100,Math.round(e.hp/e.hpMax*100))):0;
-      mhp='<div class="mhp"><label class="minor" for="hp-'+e.id+'">HP</label><input class="n" id="hp-'+e.id+'" data-ihpcur="'+e.id+'" inputmode="numeric" value="'+e.hp+'"><span class="minor">/ '+e.hpMax+'</span>'+
+      mhp+='<div class="mhp"><label class="minor" for="hp-'+e.id+'">HP</label><input class="n" id="hp-'+e.id+'" data-ihpcur="'+e.id+'" inputmode="numeric" value="'+e.hp+'"><span class="minor">/ '+e.hpMax+'</span>'+
         '<span class="mhp-g"><input class="n" data-idmg="'+e.id+'" inputmode="numeric" placeholder="±" aria-label="'+esc(eName(e))+': amount of damage or healing" title="Type an amount, then Enter (or Hurt) for damage">'+
         '<button class="hurt" data-ihurt="'+e.id+'">Hurt</button><button class="heal" data-iheal="'+e.id+'">Heal</button></span>'+
         '<div class="hpbar"><i class="'+(pct<=25?'low':'')+'" style="width:'+pct+'%"></i></div></div>';
@@ -1106,16 +1141,53 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       '<div class="ini-sub">'+sub.join('')+'</div>'+who2+mhp+'</div>'+
       '<div class="ini-act">'+act+'</div></li>';
   }
+  function foeKey(name){return String(name||'').trim().toLowerCase()}
+  function foeList(){return Object.keys(state.foes).sort().map(function(k){return state.foes[k]})}
   function addView(){
-    var f=addForm;
+    var f=addForm, saved=foeList();
     return '<section class="pick" aria-labelledby="ad-h"><div class="pk-head"><h2 id="ad-h">Add enemies</h2><button class="ghost" id="ad-close">Close</button></div>'+
-      '<div class="pk-row"><label class="stack" style="flex:2;min-width:10em"><span class="lbl">Name</span><input id="ad-name" value="'+esc(f.name||'')+'" placeholder="Goblin" autocomplete="off"></label>'+
+      '<div class="pk-row"><label class="stack" style="flex:2;min-width:10em"><span class="lbl">Name</span><input id="ad-name" list="foe-names" value="'+esc(f.name||'')+'" placeholder="Goblin" autocomplete="off"></label>'+
+      '<datalist id="foe-names">'+saved.map(function(t){return '<option value="'+esc(t.name)+'">'}).join('')+'</datalist>'+
       '<label class="stack"><span class="lbl">How many</span><input class="n" id="ad-count" inputmode="numeric" value="'+esc(f.count||'1')+'"></label>'+
       '<label class="stack"><span class="lbl">HP each</span><input class="n" id="ad-hp" value="'+esc(f.hp||'')+'" placeholder="7 or 2d6" style="width:6em"></label>'+
       '<label class="stack"><span class="lbl">AC</span><input class="n" id="ad-ac" inputmode="numeric" value="'+esc(f.ac||'')+'" placeholder="—"></label>'+
       '<label class="stack"><span class="lbl">Init bonus</span><input class="n" id="ad-init" inputmode="numeric" value="'+esc(f.init||'')+'" placeholder="+0"></label></div>'+
+      '<div class="pk-row"><label class="stack" style="flex:3;min-width:12em"><span class="lbl">Notes</span><input id="ad-note" value="'+esc(f.note||'')+'" placeholder="Resistances, tactics…" autocomplete="off"></label>'+
+      '<label class="stack" title="Legendary actions per round (0 for none)"><span class="lbl">Legendary actions</span><input class="n" id="ad-leg" inputmode="numeric" value="'+esc(f.leg||'')+'" placeholder="0"></label>'+
+      '<label class="stack" title="Legendary resistance uses per day (0 for none)"><span class="lbl">Leg. resist / day</span><input class="n" id="ad-lres" inputmode="numeric" value="'+esc(f.lres||'')+'" placeholder="0"></label></div>'+
       '<div class="pk-row"><label class="minor pk-roll"><input type="checkbox" id="ad-roll"'+(f.roll?' checked':'')+'> Roll initiative for them</label><button class="primary" id="ad-go">Add to the fight</button></div>'+
-      '<p class="minor" style="margin:0">HP can be a number or dice (2d6+2), rolled for each one. Leave HP empty to skip tracking it.</p></section>';
+      '<p class="minor" style="margin:0">HP can be a number or dice (2d6+2), rolled for each one. Leave HP empty to skip tracking it. Every enemy you add is remembered by name: pick it below (or type its name) to fill these in next time.</p>'+
+      (saved.length?'<div class="foes"><span class="lbl">Saved enemies</span>'+saved.map(function(t){var k=foeKey(t.name);
+        return '<span class="foe"><button data-foe="'+esc(k)+'" title="Fill in '+esc(t.name)+(t.hp?' · HP '+esc(t.hp):'')+(t.ac?' · AC '+esc(t.ac):'')+'">'+esc(t.name)+'</button><button class="ghost x" data-foedel="'+esc(k)+'" aria-label="Forget '+esc(t.name)+'" title="Forget">✕</button></span>'}).join('')+'</div>':'')+
+      '</section>';
+  }
+  // Saved encounters: a list of enemy groups (and a lair) to put into the fight in one go.
+  function encGroups(I){
+    var g=[], by={};
+    I.list.forEach(function(e){
+      if(hero(e)||e.lair)return; var b=e.base||e.name||'Enemy', k=foeKey(b);
+      if(!by[k]){by[k]={name:b,count:0,hp:e.hpF!=null?e.hpF:e.hpMax!=null?String(e.hpMax):'',ac:(e.s&&e.s.ac)||'',init:(e.s&&e.s.init)||'',note:e.note||'',leg:e.leg?String(e.leg.max):'',lres:e.lres?String(e.lres.max):''};g.push(by[k])}
+      by[k].count++;
+    });
+    return g;
+  }
+  function encSummary(en){return en.foes.map(function(f){return f.count+' × '+f.name}).concat(en.lair?['lair actions']:[]).join(', ')||'empty'}
+  function encView(){
+    var I=ini(), cur=encGroups(I), hasLair=I.list.some(function(e){return e.lair});
+    return '<section class="pick" aria-labelledby="enc-h"><div class="pk-head"><h2 id="enc-h">Saved encounters</h2><button class="ghost" id="enc-close">Close</button></div>'+
+      '<div class="pk-row"><label class="stack" style="flex:2;min-width:12em"><span class="lbl">Save the enemies in the tracker now as</span><input id="enc-name" value="'+esc(encForm.name||'')+'" placeholder="Bandit ambush" autocomplete="off"></label>'+
+      '<button class="primary" id="enc-save"'+(cur.length||hasLair?'':' disabled')+'>Save encounter</button></div>'+
+      '<p class="minor" style="margin:0">'+(cur.length||hasLair?'Saves '+esc(encSummary({foes:cur,lair:hasLair}))+'. HP typed as dice rolls again each time it’s loaded.':'Prep a fight: add its enemies (and a lair) to the tracker, save it here, then press New fight to clear them until you need it.')+'</p>'+
+      (state.encs.length?'<ul class="encs">'+state.encs.map(function(en){
+        return '<li><div><b>'+esc(en.name)+'</b><span class="minor">'+esc(encSummary(en))+'</span></div><div class="b">'+
+          (encAsk===en.id?'<button class="primary" data-encdelyes="'+en.id+'">Yes, delete</button><button data-encdelno="1">Keep</button>':
+          '<button class="primary" data-encload="'+en.id+'">Add to the fight</button><button class="ghost" data-encdel="'+en.id+'" aria-label="Delete '+esc(en.name)+'">Delete</button>')+'</div></li>'}).join('')+'</ul>'+
+        '<label class="minor pk-roll"><input type="checkbox" id="enc-roll"'+(encForm.roll?' checked':'')+'> Roll initiative for them</label>':'<p class="minor" style="margin:0">No saved encounters yet.</p>')+
+      '</section>';
+  }
+  function addLair(I){
+    if(I.list.some(function(e){return e.lair}))return false;
+    I.list.push({id:'dm-lair'+Date.now().toString(36),name:'Lair actions',lair:true,init:20,tb:-1000,note:''});sortInit(I);return true;
   }
   // "7" → 7 · "2d6+2" → rolled each time
   function hpRoll(s){
@@ -1124,20 +1196,46 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     var v=parseInt(t,10);return isNaN(v)?null:v;
   }
   function addEnemies(){
-    var I=ini(), f=addForm, base=String(f.name||'').trim()||'Enemy', k=Math.max(1,Math.min(30,parseInt(f.count,10)||1)), rolls=[];
+    var f=addForm, rolls=putEnemies(f,f.roll), k=Math.max(1,Math.min(30,parseInt(f.count,10)||1));
+    rememberFoe(f);sortInit(ini());savePlay();postRound();
+    statusMsg='Added '+k+(k===1?' enemy':' enemies')+(rolls.length?'. Initiative: '+rolls.join(', '):'. Type their initiative rolls.');
+    addForm={count:'1',roll:f.roll};
+  }
+  // Every named enemy added is kept as a saved enemy, so its numbers fill in next time.
+  function rememberFoe(f){
+    var nm=String(f.name||'').trim(); if(!nm||nm.toLowerCase()==='enemy')return;
+    state.foes[foeKey(nm)]={name:nm,hp:String(f.hp||'').trim(),ac:String(f.ac||'').trim(),init:String(f.init||'').trim(),note:String(f.note||'').trim(),leg:String(f.leg||'').trim(),lres:String(f.lres||'').trim()};
+    saveState();
+  }
+  function fillFromFoe(k){
+    var t=state.foes[k]; if(!t)return false;
+    addForm={name:t.name,count:addForm.count||'1',hp:t.hp,ac:t.ac,init:t.init,note:t.note,leg:t.leg,lres:t.lres,roll:addForm.roll};return true;
+  }
+  // Put a group of enemies ({name,count,hp,ac,init,note,leg,lres}) in the tracker; returns the initiative rolls made.
+  function putEnemies(f,roll){
+    var I=ini(), base=String(f.name||'').trim()||'Enemy', k=Math.max(1,Math.min(30,parseInt(f.count,10)||1)), rolls=[];
+    var leg=Math.max(0,Math.min(5,parseInt(f.leg,10)||0)), lres=Math.max(0,Math.min(5,parseInt(f.lres,10)||0));
     var same=I.list.filter(function(e){return !hero(e)&&(e.base||e.name)===base}).length, many=k+same>1;
     if(same===1){var lone=I.list.find(function(e){return !hero(e)&&e.name===base});if(lone){lone.name=base+' 1';lone.base=base}}
     for(var i=0;i<k;i++){
       var hp=hpRoll(f.hp), id='dm-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-      var e={id:id,name:many?base+' '+(same+i+1):base,base:base,init:'',tb:0,note:'',s:{ac:String(f.ac||'').trim(),init:String(f.init||'').trim()}};
-      if(hp!=null){e.hp=hp;e.hpMax=hp}
+      var e={id:id,name:many?base+' '+(same+i+1):base,base:base,init:'',tb:0,note:String(f.note||'').trim(),s:{ac:String(f.ac||'').trim(),init:String(f.init||'').trim()}};
+      if(hp!=null){e.hp=hp;e.hpMax=hp;e.hpF=String(f.hp).trim()}
+      if(leg)e.leg={max:leg,used:0};
+      if(lres)e.lres={max:lres,used:0};
       var md=initMod(e); e.tb=md==null?0:md;
-      if(f.roll){var d=1+Math.floor(Math.random()*20);e.init=d+(md||0);rolls.push(e.name+' '+e.init)}
+      if(roll){var d=1+Math.floor(Math.random()*20);e.init=d+(md||0);rolls.push(e.name+' '+e.init)}
       I.list.push(e);
     }
+    return rolls;
+  }
+  function loadEnc(id){
+    var I=ini(), en=state.encs.find(function(x){return x.id===id}); if(!en)return;
+    var rolls=[], n0=I.list.length;
+    en.foes.forEach(function(f){rolls=rolls.concat(putEnemies(f,encForm.roll))});
+    var lair=en.lair&&addLair(I);
     sortInit(I);savePlay();postRound();
-    statusMsg='Added '+k+(k===1?' enemy':' enemies')+(rolls.length?'. Initiative: '+rolls.join(', '):'. Type their initiative rolls.');
-    addForm={count:'1',roll:f.roll};
+    statusMsg='Added '+en.name+': '+(I.list.length-n0-(lair?1:0))+' enemies'+(lair?' and lair actions':'')+(rolls.length?'. Initiative: '+rolls.join(', '):'. Type their initiative rolls.');
   }
   function initView(){
     var I=ini();
@@ -1152,7 +1250,9 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     var asking=callFor(I), anyLive=state.party.some(function(p){return hasSheet(p)&&!p.paper});
     var tools='<div class="ini-tools">'+(active||!anyLive?'':I.call?'<button id="ini-call-stop" title="Stop asking; type the rest yourself">Stop asking'+(asking.length?' ('+asking.length+' to go)':'')+'</button>':
         '<button id="ini-call" title="Each rider on a live sheet without a roll gets asked to roll on their own sheet">Ask players to roll</button>')+
-      '<button class="primary" id="ini-add" aria-expanded="'+adding+'">Add enemies</button><button id="ini-sort" title="Re-sort by initiative">Sort</button>'+
+      '<button class="primary" id="ini-add" aria-expanded="'+adding+'">Add enemies</button><button id="ini-enc" aria-expanded="'+encOpen+'">Encounters</button>'+
+      (I.list.some(function(e){return e.lair})?'':'<button id="ini-lair" title="Lair actions take a turn on initiative 20, losing ties">Add lair</button>')+
+      '<button id="ini-sort" title="Re-sort by initiative">Sort</button>'+
       (confirmNewFight?'<button class="primary" id="ini-new-yes">Yes, clear for a new fight</button><button id="ini-new-no">Cancel</button>':'<button id="ini-new" title="Clears every roll and the enemies; timers keep running">New fight</button>')+'</div>';
     var list='<ol class="ini-list" aria-label="Turn order">'+I.list.map(function(e){return initRow(I,e,c,active)}).join('')+'</ol>';
     var who='<option value="">— nobody in particular —</option><option value="party"'+(fxForm.who==='party'?' selected':'')+'>Whole party</option>'+I.list.map(function(e){var p=hero(e),opts=p?[[e.id,p.name],['dr-'+p.id,dName(p)+' ('+p.name+'’s dragon)']]:[[e.id,eName(e)]];return opts.map(function(o,i){var sel=fxForm.who!=null?fxForm.who===o[0]:(c===e&&!i);return '<option value="'+o[0]+'"'+(sel?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')}).join('');
@@ -1168,21 +1268,25 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       (I.fx.length?I.fx.map(function(f){return fxCard(I,f)}).join(''):'<p class="minor" style="margin:0">No timers running.</p>')+
       (!active&&I.fx.some(function(f){return !ended(f)})?'<div class="ini-tools"><button id="fx-min" title="Outside combat: every timer loses 10 rounds">Pass 1 minute</button><button id="fx-10min">Pass 10 minutes</button></div>':'')+
       '</section>';
-    return '<div class="ini"><div class="ini-main">'+bar+alert+tools+(adding?addView():'')+list+'</div>'+side+'</div>';
+    return '<div class="ini"><div class="ini-main">'+bar+alert+tools+(adding?addView():'')+(encOpen?encView():'')+list+'</div>'+side+'</div>';
   }
   function setInit(id,v){
     var I=ini(), e=entry(I,id); if(!e) return;
     var x=String(v==null?'':v).trim().replace('−','-'), num=x===''?'':parseInt(x,10);
     if(num!==''&&isNaN(num))num='';
     if(String(num)===String(e.init===undefined?'':e.init)) return;
-    e.init=num; var m=initMod(e); e.tb=m==null?0:m;
+    e.init=num; var m=initMod(e); e.tb=e.lair?-1000:m==null?0:m;
     if(num==='')e.held=false;
     sortInit(I); savePlay();
   }
   function initGo(fn){
     var I=ini(), was=I.turn;fn(I);checkEnds(I);
     var c=I.round&&I.turn!==was?entry(I,I.turn):null, ns=c&&I.notes&&I.notes[c.id];
+    if(c)statusMsg='';   // a new turn: last turn's message is stale
     if(ns&&ns.length)statusMsg=eName(c)+'’s turn: '+ns.join(' · ');
+    // a turn just ended: remind the DM who can still take a legendary action
+    var pw=was&&c&&fn!==prevTurn?entry(I,was):null, lg=c?I.list.filter(function(e){return e.leg&&e!==c&&e!==pw&&inTurn(e)&&!(e.hpMax!=null&&e.hp<=0)&&e.leg.max-(e.leg.used||0)>0}):[];
+    if(pw&&!pw.lair&&lg.length)statusMsg=(ns&&ns.length?statusMsg+' · ':'')+'End of '+eName(pw)+'’s turn: legendary action? '+lg.map(function(e){return e.name+' ('+(e.leg.max-(e.leg.used||0))+' left)'}).join(', ');
     savePlay();postRound();render();
   }
   // Damage (dir −1) or healing (+1) on an enemy from its ± box; a typed "-12" counts as damage either way.
@@ -1209,7 +1313,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
         (onInit?'':'<button id="fold-btn">'+(anyClosed?'Show all dragons':'Hide all dragons')+'</button>')+'<button id="export-btn">Export backup</button><button id="import-btn">Import backup</button><button class="primary" id="edit-btn">Edit sheet</button>';
     }
     root.innerHTML='<header><div><h1>Dragon Riders of Arcanum</h1><p class="sub">The Homies · Isle of Droojh · D&amp;D 5e · updated '+esc(state.updated)+'</p></div>'+
-      '<div class="tools">'+(statusMsg?'<span class="status" role="status">'+esc(statusMsg)+'</span>':'')+tools+'</div></header>'+
+      '<div class="tools">'+(statusMsg?'<span class="status" role="status">'+esc(statusMsg)+'</span>':'')+shortNote()+tools+'</div></header>'+
       '<nav class="vtabs" role="tablist" aria-label="Sheet sections"><button role="tab" data-view="party" aria-selected="'+!onInit+'">Party</button><button role="tab" data-view="init" aria-selected="'+onInit+'">Initiative'+(ir?' · round '+ir:'')+'</button></nav>'+
       (onInit?initView():
       '<p class="notice">Riders with their own sheet on this site (● Live sheet) update here by themselves: HP, AC, saves, speed, conditions and their dragon’s HP. Damage, conditions and long rests you set here go to their sheet. Switch a rider to Paper to track them from the stats typed in here instead. Open a dragon row for its stat block, Dragon-Rider Bond and Breya’s wards. Conditions and exhaustion use the 2014 Player’s Handbook rules.</p>'+
@@ -1260,13 +1364,30 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       })();
     })();
   }
+  // A short rest opens the Short rest window on each live sheet (spending Hit Dice is the player's call); party/rest.shortAt
+  // carries it, and each sheet's report says when its player finished (shortDone).
+  var restDoc=null, shortCall=null;
+  function shortLive(){
+    var ids=liveIds(); if(!ids.length)return '';
+    if(!cloudDb)return ' Riders on live sheets take their short rest on their own sheets.';
+    var at=new Date().toISOString(); shortCall={at:at,ids:ids};
+    restDoc={at:(restDoc&&restDoc.at)||'',shortAt:at};
+    cloudDb.doc('party/rest').set(restDoc).catch(function(){shortCall=null;statusMsg='Couldn’t send the short rest to the live sheets. Check the connection and try again.';render()});
+    return ' Riders on live sheets get the Short rest window on their sheets to spend Hit Dice.';
+  }
+  function shortNote(){
+    if(!shortCall)return '';
+    var left=0, names=shortCall.ids.map(function(id){var L=rawLink(id),p=byId(id),ok=!!(L&&L.shortDone&&L.shortDone>=shortCall.at);if(!ok)left++;return (p?p.name:id)+(ok?' ✓':' …')});
+    return '<span class="status" role="status">Short rest'+(left?'':' finished')+': '+esc(names.join(', '))+' <button class="ghost x" id="short-x" aria-label="Hide short rest progress" title="Hide">✕</button></span>';
+  }
   function restLive(){
     var ids=liveIds(); if(!ids.length)return;
     if(!cloudDb){statusMsg+=' Riders on live sheets take their long rest on their own sheets.';return}
     var at=new Date().toISOString(), done={};
     function nm(id){var p=byId(id);return p?p.name:id}
     function upd(){statusMsg='Long rest: '+ids.map(function(id){return nm(id)+(done[id]===true?' ✓':done[id]===false?' (rests when their sheet is next opened)':' …')}).join(', ')+'. Paper riders and dragons restored here.';softRender()}
-    cloudDb.doc('party/rest').set({at:at}).then(function(){
+    shortCall=null; restDoc={at:at,shortAt:(restDoc&&restDoc.shortAt)||''};
+    cloudDb.doc('party/rest').set(restDoc).then(function(){
       upd();
       visitSheets(ids,function(id){var L=rawLink(id);return !!(L&&L.restAt&&L.restAt>=at)},function(id,ok){done[id]=ok;upd()});
     },function(){statusMsg='Couldn’t send the long rest to the live sheets. Check the connection and try again.';render()});
@@ -1281,8 +1402,9 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     else if(t.id==='restore-btn'){ask='restore';render();}
     else if(t.id==='long-btn'){ask='long';render();}
     else if(t.id==='ask-no'){ask='';render();}
-    else if(t.id==='restore-yes'){state=JSON.parse(DEFAULTS);ask='';dirty=true;render();}
-    else if(t.id==='short-btn'){shortRest();savePlay();statusMsg='Short rest: tandem uses, short-rest abilities and breath weapons restored. Spend Hit Dice to heal'+(liveIds().length?'; riders on live sheets do that on their own sheets.':'.');render();}
+    else if(t.id==='restore-yes'){var kf=state.foes,ke=state.encs;state=JSON.parse(DEFAULTS);state.foes=kf;state.encs=ke;fixParty();ask='';dirty=true;render();}
+    else if(t.id==='short-btn'){shortRest();savePlay();statusMsg='Short rest: tandem uses, short-rest abilities and breath weapons restored. Spend Hit Dice to heal.'+shortLive();render();}
+    else if(t.id==='short-x'){shortCall=null;render();var sb2=document.getElementById('short-btn');if(sb2)sb2.focus();return}
     else if(t.id==='long-yes'){longRest();savePlay();ask='';statusMsg='Long rest: HP and abilities restored, temp HP cleared, 1 exhaustion level removed.';restLive();render();}
     else if(t.id==='fold-btn'){var anyC=state.party.some(function(p){return !play.open[p.id]});state.party.forEach(function(p){play.open[p.id]=anyC});savePlay();render();}
     else if(t.id==='export-btn'){openExport();}
@@ -1333,6 +1455,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       if(ds.pk==='tan')play.tandem[k]=tot-to;
       else if(ds.pk==='use')play.used[k]=tot-to;
       else if(ds.pk==='ds-s'||ds.pk==='ds-f'){var d0=play.death[k]||{s:0,f:0};d0[ds.pk==='ds-s'?'s':'f']=to;play.death[k]=d0;}
+      else if(ds.pk==='leg'||ds.pk==='lres'){var le=entry(ini(),k),lo=le&&le[ds.pk];if(lo)lo.used=tot-to;}
       savePlay();render();
     }
     else if(ds.spend){play.spent[ds.spend]=true;delete rolls[ds.spend];savePlay();render();}
@@ -1366,6 +1489,22 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     else if(t.id==='ini-add'){adding=!adding;render();var af=document.getElementById(adding?'ad-name':'ini-add');if(af)af.focus();return}
     else if(t.id==='ad-close'){adding=false;render();var ib=document.getElementById('ini-add');if(ib)ib.focus();return}
     else if(t.id==='ad-go'){readAddForm();addEnemies();render();var an=document.getElementById('ad-name');if(an)an.focus();return}
+    else if(ds.foe){readAddForm();fillFromFoe(ds.foe);render();var ac2=document.getElementById('ad-count');if(ac2){ac2.focus();ac2.select()}return}
+    else if(ds.foedel){var fg=state.foes[ds.foedel];delete state.foes[ds.foedel];saveState();readAddForm();statusMsg=fg?'Forgot '+fg.name+'.':'';render();var an2=document.getElementById('ad-name');if(an2)an2.focus();return}
+    else if(ds.iconds){condOpen[ds.iconds]=!condOpen[ds.iconds];if(!condOpen[ds.iconds])delete condAsk[ds.iconds];render();var cb2=document.querySelector('[data-iconds="'+ds.iconds+'"]');if(cb2)cb2.focus();return}
+    else if(t.id==='ini-lair'){I=ini();addLair(I);savePlay();postRound();statusMsg='Lair actions added on initiative 20.';render();var ib2=document.getElementById('ini-sort');if(ib2)ib2.focus();return}
+    else if(t.id==='ini-enc'||t.id==='enc-close'){encOpen=t.id==='ini-enc'?!encOpen:false;encAsk='';render();var eb=document.getElementById(encOpen?'enc-name':'ini-enc');if(eb)eb.focus();return}
+    else if(t.id==='enc-save'){
+      I=ini();var en=String((document.getElementById('enc-name')||{}).value||'').trim(), gs=encGroups(I), lr=I.list.some(function(x){return x.lair});
+      if(!en){statusMsg='Give the encounter a name first.';render();var ne=document.getElementById('enc-name');if(ne)ne.focus();return}
+      var old=state.encs.find(function(x){return foeKey(x.name)===foeKey(en)}), rec={id:old?old.id:'enc'+Date.now().toString(36),name:en,foes:gs,lair:lr};
+      if(old)state.encs[state.encs.indexOf(old)]=rec;else state.encs.push(rec);
+      saveState();encForm.name='';statusMsg=(old?'Updated ':'Saved ')+en+': '+encSummary(rec)+'.';render();return;
+    }
+    else if(ds.encload){loadEnc(ds.encload);render();return}
+    else if(ds.encdel){encAsk=ds.encdel;render();var dy=document.querySelector('[data-encdelyes]');if(dy)dy.focus();return}
+    else if(ds.encdelno){encAsk='';render();return}
+    else if(ds.encdelyes){var ge=state.encs.find(function(x){return x.id===ds.encdelyes});state.encs=state.encs.filter(function(x){return x.id!==ds.encdelyes});encAsk='';saveState();statusMsg=ge?'Deleted '+ge.name+'.':'';render();return}
     else if(ds.ihurt||ds.iheal){enemyHp(ds.ihurt||ds.iheal,ds.ihurt?-1:1);var hb=document.querySelector('[data-idmg="'+(ds.ihurt||ds.iheal)+'"]');if(hb)hb.focus();return}
     else if(t.id==='ini-new'){confirmNewFight=true;render();}
     else if(t.id==='ini-new-no'){confirmNewFight=false;render();}
@@ -1398,7 +1537,8 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   });
   function readAddForm(){
     function v(id){var el=document.getElementById(id);return el?el.value:''}
-    addForm={name:v('ad-name'),count:v('ad-count'),hp:v('ad-hp'),ac:v('ad-ac'),init:v('ad-init'),roll:!!(document.getElementById('ad-roll')||{}).checked};
+    if(!document.getElementById('ad-name'))return;
+    addForm={name:v('ad-name'),count:v('ad-count'),hp:v('ad-hp'),ac:v('ad-ac'),init:v('ad-init'),note:v('ad-note'),leg:v('ad-leg'),lres:v('ad-lres'),roll:!!(document.getElementById('ad-roll')||{}).checked};
   }
   document.addEventListener('keydown',function(e){
     var el=e.target, ds=el.dataset||{};
@@ -1415,12 +1555,14 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     else if(ds.idmg){e.preventDefault();enemyHp(ds.idmg,-1);var db2=document.querySelector('[data-idmg="'+ds.idmg+'"]');if(db2)db2.focus();}
     else if(el.id==='fx-name'||el.id==='fx-dur'){e.preventDefault();var fb=document.getElementById('fx-add');if(fb)fb.click();}
     else if(/^ad-/.test(el.id)&&el.id!=='ad-roll'){e.preventDefault();var gb=document.getElementById('ad-go');if(gb)gb.click();}
+    else if(el.id==='enc-name'){e.preventDefault();var sb=document.getElementById('enc-save');if(sb)sb.click();}
   });
   document.addEventListener('input',function(e){
     var el=e.target, ds=el.dataset, I;
     if(ds.iname||ds.inote){I=ini();var ie=entry(I,ds.iname||ds.inote);if(ie){ie[ds.iname?'name':'note']=el.value;savePlay();}return}
     if(el.id==='fx-name'){fxForm.name=el.value;return}
     if(el.id==='fx-dur'){fxForm.dur=el.value;return}
+    if(el.id==='enc-name'){encForm.name=el.value;return}
     var p=ds.id&&byId(ds.id); if(!p)return;
     if(ds.k){p[ds.k]=el.value;dirty=true;}
     else if(ds.dk&&el.tagName!=='SELECT'){p.dragon[ds.dk]=el.value;dirty=true;if(ds.dk==='color'){var td=el.closest('td');if(td)td.style.setProperty('--gem',el.value);}}
@@ -1439,7 +1581,9 @@ span.chip{border:1px solid var(--rule);display:inline-block}
     if(ds.ihpcur){var Ih=ini(),eh=entry(Ih,ds.ihpcur),hv=n(el.value);if(eh&&hv!=null){eh.hp=hv;savePlay();}softRender();return}
     if(el.id==='fx-unit'){fxForm.unit=el.value;render();var fu=document.getElementById('fx-unit');if(fu)fu.focus();return}
     if(el.id==='fx-who'){fxForm.who=el.value;return}
+    if(el.id==='ad-name'){readAddForm();var fk=foeKey(el.value);if(state.foes[fk]&&!addForm.hp&&!addForm.ac&&fillFromFoe(fk)){render();var cn=document.getElementById('ad-count');if(cn){cn.focus();cn.select()}}return}
     if(/^ad-/.test(el.id)){readAddForm();return}
+    if(el.id==='enc-roll'){encForm.roll=el.checked;return}
     var p=ds.id&&byId(ds.id); if(!p)return;
     if(ds.dsp){var set=AB.filter(function(a){var cb=document.getElementById('dsp-'+a+'-'+p.id);return cb&&cb.checked});p.dragon.saves=set.join(',');dirty=true;}
     else if(ds.dk==='bond'){p.dragon.bond=el.value;var cap=TKNOWN[bondLv(p)];if(p.dragon.tactics.length>cap)p.dragon.tactics=p.dragon.tactics.slice(0,cap);dirty=true;render();}
@@ -1454,7 +1598,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   }
 
   // ---------- Backup ----------
-  function backupJson(){return JSON.stringify({sheet:'arcanum-dragon-riders',version:1,updated:state.updated,party:state.party,play:play},null,2)}
+  function backupJson(){return JSON.stringify({sheet:'arcanum-dragon-riders',version:1,updated:state.updated,party:state.party,foes:state.foes,encs:state.encs,play:play},null,2)}
   function dialog(id,title,body){
     var d=document.getElementById(id);
     if(!d){d=document.createElement('dialog');d.id=id;d.setAttribute('aria-labelledby',id+'-t');document.body.appendChild(d);}
@@ -1490,7 +1634,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
   function importText(txt){
     var st=document.getElementById('import-status');
     try{var d=JSON.parse(txt);if(!d||!Array.isArray(d.party))throw 0;
-      state={updated:d.updated||new Date().toISOString().slice(0,10),party:d.party};fixParty();
+      state={updated:d.updated||new Date().toISOString().slice(0,10),party:d.party,foes:d.foes,encs:d.encs};fixParty();
       play=d.play&&typeof d.play==='object'?d.play:{};normPlay();logs={};rolls={};
       saveState();savePlay();statusMsg='Backup imported';
       var dl=document.getElementById('import-dlg');if(dl)dl.close();render();
@@ -1554,6 +1698,7 @@ span.chip{border:1px solid var(--rule);display:inline-block}
         lastRoundKey=null;postRound();
         // what was already sent to live sheets (kept whole, since each write replaces the document)
         db.doc('party/hp').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)hpCmds=(s.exists&&s.data())||{}},function(){});
+        db.doc('party/rest').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)restDoc=s.exists?s.data():null},function(){});
         db.doc('party/conds').onSnapshot(function(s){if(!s.metadata||!s.metadata.hasPendingWrites)dmConds=(s.exists&&s.data())||{}},function(){});
         // Hidecarved Wards, shared with Breya's sheet and every rider's sheet
         db.doc('party/wards').onSnapshot(function(s){
