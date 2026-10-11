@@ -509,6 +509,18 @@
       wrap.addEventListener("pointerdown", once, true);
     } else go();
   }
+  /* The DM took back an unlock (party/conds '<rider>'.lvlx): drop an unused unlock, or undo the level-up made with it.
+     A level-up counts as made with it when it happened after the unlock arrived (S.dm.cond.lvl is that time). */
+  function takeLevel() {
+    const p = document.getElementById("lvl-party"); if (p) p.remove();
+    if (MODAL && MODAL.type === "levelUp") MODAL = null;
+    if ((S.levelGrant || 0) > 0) { S.levelGrant--; return "Level up is locked again."; }
+    const granted = Date.parse((S.dm && S.dm.cond && S.dm.cond.lvl) || "") || 0, hist = S.history || [], h = hist[hist.length - 1];
+    if (!granted || !h || h.at < granted) return "";
+    hist.pop(); const dm = S.dm;
+    S = migrate(Object.assign(h.snapshot, { history: hist, dm, levelGrant: 0 }));
+    return `Back to level ${h.from}.`;
+  }
   window.DR_LEVEL_PARTY = levelParty; // for a preview of the pop-up from the browser console
   // The DM called a short rest for the party: open the Short rest window (spending hit dice stays the player's choice).
   function dmShortRest() {
@@ -631,7 +643,7 @@
       if (msg.length) { commit(); toast("From the DM", msg.map(esc).join("<br>"), 7000); }
     }, () => {});
     db.doc("party/conds").onSnapshot((s) => {
-      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = []; let celebrate = false;
+      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = []; let celebrate = false, taken = "";
       const first = !seen.condLinked; seen.condLinked = true; let changed = first;
       Object.keys(mine2).forEach((k) => {
         const v = mine2[k] || {}, at = String(v.at || "");
@@ -639,6 +651,7 @@
         if (first) return; // first link: skip what was sent before
         if (k === "exh") { const x = Math.max(0, Math.min(6, +v.v || 0)); if (x !== +S.exhaustion) { S.exhaustion = x; msg.push(`exhaustion ${x}`); } return; }
         if (k === "lvl") { S.levelGrant = (S.levelGrant || 0) + 1; celebrate = true; return; }
+        if (k === "lvlx") { celebrate = false; taken = takeLevel() || taken; return; }
         if (k === "insp") { if (!!v.on !== !!S.inspiration) { S.inspiration = !!v.on; msg.push(v.on ? "inspiration" : "removed inspiration"); } return; }
         if (k === "concentrating") {
           if (!v.on && S.concentration) { msg.push(`ended concentration on ${S.concentration}`); S.concentration = ""; }
@@ -648,8 +661,9 @@
         const c = CONDITIONS.find((x) => x[0] === k); if (!c) return;
         if (S.conds.includes(k) !== !!v.on) { S.conds = v.on ? S.conds.concat(k) : S.conds.filter((x) => x !== k); msg.push((v.on ? "" : "removed ") + c[1].toLowerCase()); }
       });
-      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (celebrate) commit(); else if (changed) persist();
+      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (celebrate || taken) commit(); else if (changed) persist();
       if (celebrate) levelParty();
+      if (taken) toast("The DM took back the level-up", esc(taken), 7000);
     }, () => {});
     db.doc("party/rest").onSnapshot((s) => {
       if (!s.exists) return; const d = s.data() || {}, at = String(d.at || ""), sh = String(d.shortAt || ""), seen = dmSeen();

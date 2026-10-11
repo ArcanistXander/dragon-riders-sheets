@@ -765,10 +765,17 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   // Their sheet reports how many unlocks are still unused (live.lvlReady).
   function lvlCtl(p){
     var l=live(p); if(!l)return '';
-    var pe=pend(p.id).lvl, ready=+l.lvlReady||0;
-    if(pe)return '<div class="minor lvl-tag">⬆ Unlocking… <span>lands when their sheet is open</span></div>';
-    if(ready)return '<div class="lvl-tag on">⬆ Level-up unlocked'+(ready>1?' ×'+ready:'')+'</div>';
-    return '<button class="ghost lvl-one" data-lvlone="'+p.id+'" title="Unlock one level-up on '+esc(p.name)+'’s sheet">Unlock level-up</button>';
+    var P=pend(p.id), ready=+l.lvlReady||0, back=granted(p.id)?'<button class="ghost lvl-one" data-lvlback="'+p.id+'" title="Lock Level up again; a level-up made with this unlock is undone">Take back</button>':'';
+    if(P.lvlx)return '<div class="minor lvl-tag">Taking back… <span>lands when their sheet is open</span></div>';
+    if(P.lvl)return '<div class="minor lvl-tag">⬆ Unlocking… <span>lands when their sheet is open</span></div>'+back;
+    if(ready)return '<div class="lvl-tag on">⬆ Level-up unlocked'+(ready>1?' ×'+ready:'')+'</div>'+back;
+    return '<button class="ghost lvl-one" data-lvlone="'+p.id+'" title="Unlock one level-up on '+esc(p.name)+'’s sheet">Unlock level-up</button>'+back;
+  }
+  // the last level command sent to this rider was an unlock, not a take-back
+  function granted(id){var d=dmConds[id]||{},g=d.lvl&&d.lvl.at,x=d.lvlx&&d.lvlx.at;return !!g&&(!x||g>x)}
+  function takeBack(ids){
+    var sent=ids.filter(function(id){return sendCond(id,'lvlx',{on:true})});
+    if(sent.length)statusMsg='Took back the level-up from '+sent.map(function(id){return byId(id).name}).join(', ')+'. Unused unlocks lock again; a level-up made with it is undone on their sheet.';
   }
   function unlockLevel(ids){
     var sent=ids.filter(function(id){return sendCond(id,'lvl',{on:true})});
@@ -1329,7 +1336,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       var anyClosed=state.party.some(function(p){return !play.open[p.id]});
       tools=(ask==='long'?'<button class="primary" id="long-yes">Confirm long rest</button><button id="ask-no">Cancel</button>':
           ask==='lvl'?'<button class="primary" id="lvl-yes">Yes, unlock a level for every rider</button><button id="ask-no">Cancel</button>':
-          '<button id="short-btn">Short rest</button><button id="long-btn">Long rest</button><button id="lvl-btn" title="Milestone: unlock Level up on every rider’s sheet">Milestone level up</button>')+allPaperBtn()+
+          ask==='lvlback'?'<button class="primary" id="lvlback-yes">Yes, take back the level-ups</button><button id="ask-no">Cancel</button>':
+          '<button id="short-btn">Short rest</button><button id="long-btn">Long rest</button><button id="lvl-btn" title="Milestone: unlock Level up on every rider’s sheet">Milestone level up</button>'+
+          (state.party.some(function(p){return granted(p.id)})?'<button id="lvlback-btn" title="Lock Level up again for everyone you unlocked it for; level-ups made with it are undone">Undo level-up</button>':''))+allPaperBtn()+
         (onInit?'':'<button id="fold-btn">'+(anyClosed?'Show all dragons':'Hide all dragons')+'</button>')+'<button id="export-btn">Export backup</button><button id="import-btn">Import backup</button><button class="primary" id="edit-btn">Edit sheet</button>';
     }
     root.innerHTML='<header><div><h1>Dragon Riders of Arcanum</h1><p class="sub">The Homies · Isle of Droojh · D&amp;D 5e · updated '+esc(state.updated)+'</p></div>'+
@@ -1424,6 +1433,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='lvl-btn'){if(!liveIds().length){statusMsg='No rider is on a live sheet. Change levels on Edit sheet.';render();return}ask='lvl';render();var ly=document.getElementById('lvl-yes');if(ly)ly.focus();return}
     else if(t.id==='lvl-yes'){ask='';unlockLevel(liveIds());render();var lb2=document.getElementById('lvl-btn');if(lb2)lb2.focus();return}
     else if(ds.lvlone){unlockLevel([ds.lvlone]);render();return}
+    else if(t.id==='lvlback-btn'){ask='lvlback';render();var lby=document.getElementById('lvlback-yes');if(lby)lby.focus();return}
+    else if(t.id==='lvlback-yes'){ask='';takeBack(state.party.filter(function(p){return granted(p.id)}).map(function(p){return p.id}));render();var lb3=document.getElementById('lvl-btn');if(lb3)lb3.focus();return}
+    else if(ds.lvlback){takeBack([ds.lvlback]);render();return}
     else if(t.id==='ask-no'){ask='';render();}
     else if(t.id==='restore-yes'){var kf=state.foes,ke=state.encs;state=JSON.parse(DEFAULTS);state.foes=kf;state.encs=ke;fixParty();ask='';dirty=true;render();}
     else if(t.id==='short-btn'){shortRest();savePlay();statusMsg='Short rest: tandem uses, short-rest abilities and breath weapons restored. Spend Hit Dice to heal.'+shortLive();render();}
