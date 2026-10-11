@@ -54,7 +54,7 @@ window.DRAGON_KINDS = {
       effect: "Each creature in the line makes a Dexterity save, taking the damage on a failure and losing its reaction until its next turn."
     },
     features: [
-      { level: 3, name: "Lightning Guard", kind: "Reaction",
+      { level: 3, name: "Lightning Guard", kind: "Reaction", dice: "1d6", diceAbil: "con", per: "round", verb: "reduce damage by",
         text: (d) => `When the rider (or an ally within 5 ft. of the dragon) is hit by a melee or ranged weapon attack, the dragon intercepts it with electromagnetic force, reducing the damage by 1d6 + ${d.mod("con")}.` }
     ],
     nameIdeas: ["Aegis", "Valor", "Kaelen", "Ignis"],
@@ -67,7 +67,28 @@ window.DRAGON_KINDS = {
   },
   crystal:  { title: "Crystal Dragon",  family: "Gem",       damageType: "radiant or necrotic", breath: { shape: "15-foot cone", effect: "On a failed save, the target is blinded until the end of its next turn." } },
   copper:   { title: "Copper Dragon",   family: "Metallic",  damageType: "acid",     breath: { shape: "15-foot cone", effect: "On a failed save, the ground in the area becomes difficult terrain for 1 round." } },
-  amethyst: { title: "Amethyst Dragon", family: "Gem",       damageType: "force",    breath: { shape: "15-foot cone", effect: "On a failed save, the target is pushed 10 feet away." } },
+  /* Ametrin (Breya). Numbers from the DM's party sheet and Breya's Quest Portal card. */
+  amethyst: {
+    title: "Amethyst Dragon", family: "Gem",
+    abilities: { str: 13, dex: 12, con: 14, int: 16, wis: 12, cha: 14 },
+    saveBonus: { dex: true, con: true, wis: true, cha: true },
+    speed: "30 ft., fly 40 ft. (hover)",
+    immunities: "Force",
+    senses: "Blindsight 10 ft., Darkvision 60 ft.",
+    languages: "Understands Draconic; telepathic bond with its rider",
+    damageType: "force",
+    bite: { dice: "1d6", type: "piercing", reach: "5 ft." },
+    breath: {
+      name: "Force Breath", recharge: "5–6", shape: "15-foot cone of kinetic force", save: "str",
+      effect: "On a failure the creature is also pushed 10 feet away; on a success it takes half damage and isn't pushed."
+    },
+    features: [
+      { level: 3, name: "Gravitational Tinkering", kind: "At will",
+        text: () => "The dragon keeps a permanent, invisible Mage Hand that can carry up to 30 lb." },
+      { level: 3, name: "Gravity Shift", kind: "Reaction", per: "short",
+        text: (d, rider) => `When a ranged attack targets ${rider}, the dragon bends gravity and the attack roll takes a −2 penalty. Once per short rest.` }
+    ]
+  },
   moonstone:{ title: "Moonstone Dragon",family: "Gem",       damageType: "psychic",  breath: { shape: "15-foot cone", effect: "On a failed save, the target is charmed for 1 round and sees the dragon as an ally." } },
   black:    { title: "Black Dragon",    family: "Chromatic", damageType: "acid",     breath: { shape: "15-foot cone", effect: "On a failed save, the acid clings and deals an extra 1d4 acid damage at the start of the target's next turn." } },
   emerald:  { title: "Emerald Dragon",  family: "Gem",       damageType: "psychic",  breath: { shape: "15-foot cone", effect: "On a failed save, the target can't take reactions until the start of its next turn." } }

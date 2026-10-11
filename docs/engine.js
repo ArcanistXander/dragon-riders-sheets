@@ -70,6 +70,8 @@
     s.resUsed = s.resUsed || {};
     s.extraSpells = s.extraSpells || [];
     s.customFeatures = s.customFeatures || [];
+    s.panels = Object.assign({}, clone(d.panels || {}), s.panels || {});
+    Object.keys(s.panels).forEach((k) => { const p = s.panels[k]; p.active = p.active || {}; p.known = p.known || null; p.used = p.used || {}; p.charges = p.charges || {}; });
     s.exhaustion = s.exhaustion || 0;
     s.conditions = s.conditions || "";
     s.heroPoints = Math.max(0, Math.min(3, +s.heroPoints || 0));
@@ -117,7 +119,7 @@
         (C.features[l] || []).forEach((f) => feats.push({ ...f, level: l, src: C.name, text: typeof f.text === "function" ? f.text(ctx) : f.text }));
         if (sub) (sub.features[l] || []).forEach((f) => feats.push({ ...f, level: l, src: sub.name, text: typeof f.text === "function" ? f.text(ctx) : f.text }));
       }
-      const sc = C.spellcasting; const out = { ...c, C, sub, ctx, feats, resources: C.resources ? C.resources(c.level) : [] };
+      const sc = C.spellcasting; const out = { ...c, C, sub, ctx, feats, resources: C.resources ? C.resources(c.level, mods) : [] };
       if (sc) {
         const am = mods[sc.ability];
         out.dc = 8 + pb + am; out.atk = pb + am; out.ability = sc.ability;
@@ -155,10 +157,18 @@
     D.resources = [].concat(...D.classes.map((c) => c.resources), fx.resources).filter((r) => r.max > 0);
     D.carry = s.abilities.str * 15;
     D.weight = s.inventory.reduce((x, i) => x + (+i.qty || 0) * (+i.wt || 0), 0);
-    D.dragon = deriveDragon(s, total, pb);
+    const dBonus = { ac: 0, why: [] };
+    D.classes.forEach((c) => { if (c.sub && c.sub.dragonBonus) { const b = c.sub.dragonBonus(s, c.level); dBonus.ac += b.ac || 0; dBonus.why.push(...(b.why || [])); } });
+    D.dragon = deriveDragon(s, total, pb, dBonus);
     return D;
   }
-  function deriveDragon(s, total, riderPB) {
+  /* Option panels (infusions, wards…) from every class and subclass the character has. */
+  function panelsFor(D) {
+    const out = [];
+    D.classes.forEach((c) => [].concat(c.C.panels || [], (c.sub && c.sub.panels) || []).forEach((p) => out.push({ P: p, c })));
+    return out;
+  }
+  function deriveDragon(s, total, riderPB, bonus = { ac: 0, why: [] }) {
     const K = DRAGON_KINDS[s.dragon.kind] || {};
     const ab = s.dragon.abilities || K.abilities || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
     const m = {}; ABIL.forEach((a) => (m[a] = mod(ab[a])));
@@ -172,12 +182,13 @@
     return {
       K, ab, m, tier, pb, hpMax, essence, unlockLevel: unlockTier ? unlockTier.level : null,
       essenceMax: DRAGON_RULES.essence.pool(riderPB, total),
-      ac: DRAGON_RULES.acBase + pb,
+      acBase: DRAGON_RULES.acBase + pb,
+      ac: DRAGON_RULES.acBase + pb + bonus.ac, acWhy: bonus.why,
       dc: 8 + pb + m.con,
       biteHit: m.str + pb,
       save: (k) => m[k] + (K.saveBonus && K.saveBonus[k] ? pb : 0),
       pp: 10 + m.wis,
-      feats: (K.features || []).filter((f) => total >= f.level).map((f) => ({ ...f, text: typeof f.text === "function" ? f.text(ctx) : f.text }))
+      feats: (K.features || []).filter((f) => total >= f.level).map((f) => ({ ...f, text: typeof f.text === "function" ? f.text(ctx, s.name.split(" ")[0]) : f.text }))
     };
   }
   const SPELL_INDEX = {};
@@ -277,7 +288,8 @@
         conds, exh: +S.exhaustion || 0, insp: !!S.inspiration, hero: S.heroPoints, conc: S.concentration || "", defenses: S.defenses || ""
       },
       dragon: {
-        name: S.dragon.name || "", kind: D.dragon.K.title || "", ac: g.ac, dc: g.dc, hit: g.biteHit, pb: g.pb, init: g.m.dex,
+        // base AC: the party sheet adds Dragonwarden wards itself
+        name: S.dragon.name || "", kind: D.dragon.K.title || "", ac: g.acBase, dc: g.dc, hit: g.biteHit, pb: g.pb, init: g.m.dex,
         hp: { cur: S.dragon.hpCurrent == null ? g.hpMax : Math.min(S.dragon.hpCurrent, g.hpMax), max: g.hpMax, temp: S.dragon.hpTemp || 0 },
         breathReady: S.dragon.breathReady !== false
       }
@@ -290,6 +302,7 @@
     S.hp.current = D.hpMax; S.hp.temp = 0; S.slotsUsed = Array(10).fill(0); S.resUsed = {};
     S.hitDiceUsed = Math.max(0, S.hitDiceUsed - Math.max(1, Math.floor(D.total / 2)));
     S.death = { s: 0, f: 0 }; S.concentration = "";
+    Object.values(S.panels || {}).forEach((p) => { p.used = {}; });
     S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0;
   }
   function dmSeen() { if (!S.dm) S.dm = { hp: {}, cond: {}, rest: "" }; return S.dm; }
@@ -442,7 +455,7 @@
     const D = derive();
     const act = document.activeElement; const fid = act && act.id; let sel = null;
     try { sel = fid && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null; } catch (e) { sel = null; }
-    $("#app").innerHTML = header(D) + vitals(D) + condStrip(D) + tabs() + `<div id="page">${page(D)}</div>`;
+    $("#app").innerHTML = header(D) + vitals(D) + condStrip(D) + tabs(D) + `<div id="page">${page(D)}</div>`;
     if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); if (sel) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not text */ } } }
   }
   function classLine(D) {
@@ -507,12 +520,52 @@
       </div>
     </section>`;
   }
-  function tabs() {
-    const T = [["overview", "Overview"], ["attacks", "Attacks"], ["spells", "Spells"], ["features", "Features"], ["dragon", "Dragon bond"], ["inventory", "Inventory"], ["story", "Story & art"]];
-    return `<nav class="tabs" role="tablist">${T.map(([k, n]) => `<button role="tab" class="tab ${k === "dragon" ? "dragon-tab" : ""}" aria-selected="${UI.tab === k}" data-act="tab" data-tab="${k}">${n}</button>`).join("")}</nav>`;
+  function tabs(D) {
+    const T = [["overview", "Overview"], ["attacks", "Attacks"], ["spells", "Spells"], ["features", "Features"]];
+    const pn = panelsFor(D);
+    if (pn.length) T.push(["panels", window.DEFAULT_CHARACTER.panelsTab || pn.map((x) => x.P.title).join(" & ")]);
+    T.push(["dragon", "Dragon bond"], ["inventory", "Inventory"], ["story", "Story & art"]);
+    const cur = T.some(([k]) => k === UI.tab) ? UI.tab : "overview";
+    return `<nav class="tabs" role="tablist">${T.map(([k, n]) => `<button role="tab" class="tab ${k === "dragon" ? "dragon-tab" : ""}" aria-selected="${cur === k}" data-act="tab" data-tab="${k}">${esc(n)}</button>`).join("")}</nav>`;
   }
   function page(D) {
-    return ({ overview, attacks, spells, features, dragon, inventory, story }[UI.tab] || overview)(D);
+    if (UI.tab === "panels" && !panelsFor(D).length) return overview(D);
+    return ({ overview, attacks, spells, features, panels, dragon, inventory, story }[UI.tab] || overview)(D);
+  }
+
+  /* ---- Option panels (artificer infusions, Dragonwarden wards…) ----
+     S.panels[id] = { known: [keys] | null, active: { key: "what it's on" }, used: { key: n }, charges: { key: n } } */
+  function panels(D) {
+    return `<div class="grid2">${panelsFor(D).map(({ P, c }) => panelCard(P, c, D)).join("")}</div>`;
+  }
+  function panelCard(P, c, D) {
+    const st = S.panels[P.id] || (S.panels[P.id] = { known: null, active: {}, used: {}, charges: {} });
+    const txt = (v) => (typeof v === "function" ? v(c.ctx) : v || "");
+    const maxActive = P.active ? P.active(c.level) : Infinity;
+    const maxKnown = P.known ? P.known(c.level) : null;
+    const nActive = Object.keys(st.active).length;
+    const knownSet = maxKnown == null ? null : new Set(st.known || []);
+    const editing = UI.panelEdit === P.id;
+    const shown = P.options.filter((o) => editing || !knownSet || knownSet.has(o.key) || st.active[o.key] != null);
+    const rows = shown.map((o) => {
+      const on = st.active[o.key] != null;
+      const early = o.lvl && c.level < o.lvl;
+      const uses = o.uses ? `<span class="pips">${Array.from({ length: o.uses.max }, (_, j) => `<button class="pip slot ${(st.used[o.key] || 0) > j ? "on" : ""}" data-act="panelUse" data-p="${P.id}" data-k="${o.key}" data-j="${j}" aria-label="${esc(o.name)} use ${j + 1}"></button>`).join("")}</span> <span class="small muted">${o.uses.reset === "short" ? "per short rest" : "per long rest"}</span>` : "";
+      const ch = o.charges && on ? `<div class="choice" style="margin-top:6px"><span class="label">Charges</span><span class="pips">${Array.from({ length: o.charges.max }, (_, j) => `<button class="pip slot ${(st.charges[o.key] || 0) > j ? "on" : ""}" data-act="panelCharge" data-p="${P.id}" data-k="${o.key}" data-j="${j}" aria-label="${esc(o.name)} charge ${j + 1}${(st.charges[o.key] || 0) > j ? " (spent)" : ""}"></button>`).join("")}</span><span class="small muted">${o.charges.max - (st.charges[o.key] || 0)} left · ${esc(o.charges.note || "")}</span></div>` : "";
+      const target = on ? `<label class="small" style="display:block;margin-top:6px">${esc(P.targetLabel || "On")}${o.own ? ` <span class="muted">(${esc(S.dragon.name || "your dragon")} only)</span>` : ""}
+          ${inp(`panels.${P.id}.active.${o.key}`, { label: P.targetLabel || "Target", ph: P.targetPh || "" })}</label>` : "";
+      const pick = editing && knownSet ? `<input type="checkbox" class="chk" data-act="panelKnow" data-p="${P.id}" data-k="${o.key}" ${knownSet.has(o.key) ? "checked" : ""} aria-label="Know ${esc(o.name)}">` : "";
+      return `<div class="feat">
+        <h4>${pick}${esc(o.name)}${o.lvl && o.lvl > 2 ? `<span class="badge">Lvl ${o.lvl}</span>` : ""}${on ? `<span class="badge dom">Active</span>` : ""}
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${uses}${editing ? "" : `<button class="btn sm ${on ? "" : "primary"}" data-act="panelToggle" data-p="${P.id}" data-k="${o.key}" aria-pressed="${on}">${on ? "End" : "Activate"}</button>`}</span></h4>
+        <p>${esc(txt(o.text))}</p>${early ? `<p class="small" style="color:var(--warn);margin:2px 0 0">Normally needs ${esc(c.C.name.toLowerCase())} level ${o.lvl}. Keep it if the DM allowed it.</p>` : ""}${target}${ch}</div>`;
+    }).join("");
+    return `<section class="panel"><div class="ph"><h2>${esc(P.title)}</h2>
+        <span class="choice"><span class="chip ${nActive > maxActive ? "warn" : "bronze"}">${nActive} / ${maxActive} ${esc(P.activeLabel || "active")}</span>
+        ${maxKnown != null ? `<span class="chip">${(st.known || []).length} / ${maxKnown} known</span><button class="btn sm" data-act="panelEdit" data-p="${P.id}" aria-pressed="${editing}">${editing ? "Done" : "Change known"}</button>` : ""}</span></div>
+      <p class="small muted" style="margin:0 0 6px">${esc(txt(P.intro))}</p>
+      ${editing ? `<p class="small" style="margin:0 0 6px">Tick the ones you know. You can swap one whenever you gain an artificer level.</p>` : ""}
+      ${rows || `<p class="small muted">Nothing chosen yet. Use “Change known” to pick.</p>`}</section>`;
   }
   const inp = (path, opts = {}) => {
     const v = getPath(S, path);
@@ -556,7 +609,7 @@
       <div class="stack">
         <section class="panel"><h2>Abilities</h2><div class="abil">${abil}</div></section>
         <section class="panel"><div class="ph"><h2>Saving throws</h2>${saveChip}</div><div class="rows">${saves}</div>
-          <p class="small muted" style="margin:8px 4px 0">Advantage vs. frightened (Brave) and poison (Stout Resilience).</p></section>
+          ${window.DEFAULT_CHARACTER.saveNote ? `<p class="small muted" style="margin:8px 4px 0">${esc(window.DEFAULT_CHARACTER.saveNote)}</p>` : ""}</section>
       </div>
       <div class="stack">
         <section class="panel"><div class="ph"><h2>Skills</h2>${checkChip}</div><div class="rows">${skills}</div>
@@ -708,7 +761,7 @@
       return main + `<tr><td colspan="6" style="background:var(--panel-2)"><div class="inline-grid">
         ${f("name", "Name")}
         <label class="small">Type<select id="f-atk-${i}-kind" class="f" data-bind="attacks.${i}.kind"><option value="melee" ${w.kind !== "ranged" ? "selected" : ""}>Melee</option><option value="ranged" ${w.kind === "ranged" ? "selected" : ""}>Ranged</option></select></label>
-        <label class="small">Attack ability<select id="f-atk-${i}-ab" class="f" data-bind="attacks.${i}.ability">${[["str", "Strength"], ["dex", "Dexterity"], ["finesse", "Finesse (best of STR/DEX)"], ["spell", "Spellcasting"]].map(([v, n]) => `<option value="${v}" ${w.ability === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label class="small">Attack ability<select id="f-atk-${i}-ab" class="f" data-bind="attacks.${i}.ability">${[["str", "Strength"], ["dex", "Dexterity"], ["finesse", "Finesse (best of STR/DEX)"], ["spell", "Spellcasting"]].concat(D.classes.some((cl) => cl.sub && cl.sub.intWeapons) || w.ability === "int" ? [["int", "Intelligence (magic weapon)"]] : []).map(([v, n]) => `<option value="${v}" ${w.ability === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         ${f("dice", "Damage dice", { ph: "1d8" })}${f("type", "Damage type")}${f("range", "Range (ft)", { ph: "e.g. 80/320" })}
         ${f("magic", "Magic bonus", { num: 1 })}${f("props", "Properties")}${f("notes", "Notes")}
         <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="attacks.${i}.prof" ${w.prof ? "checked" : ""}> Proficient</label>
@@ -756,7 +809,14 @@
   }
 
   /* ---- Spells ---- */
-  function spellsAvailable(c) { return window.SPELLS[c.C.spellcasting.list] || []; }
+  /* The class list, plus always-prepared subclass spells that aren't on it. */
+  function spellsAvailable(c) {
+    const list = window.SPELLS[c.C.spellcasting.list] || [];
+    const have = new Set(list.map((r) => r[0]));
+    const extra = (c.domain || []).filter((n) => !have.has(n) && SPELL_INDEX[n]).map((n) => { const x = SPELL_INDEX[n]; return [x.name, x.level]; });
+    return list.concat(extra);
+  }
+  const alwaysLabel = (c) => (c && c.sub && c.sub.alwaysLabel) || "Domain";
   function spells(D) {
     const c = D.caster;
     if (!c) return `<section class="panel"><p>This character doesn't cast spells.</p></section>`;
@@ -787,7 +847,7 @@
           <span><span class="label">Ability</span> <b>${ABIL_NAME[c.ability]}</b></span>
           <span><span class="label">Save DC</span> <b class="num">${c.dc}</b></span>
           <span><span class="label">Attack</span> <b class="num">${sg(c.atk)}</b></span>
-          <span><span class="label">Prepared</span> <b class="num" style="color:${prepCount > c.prepMax ? "var(--bad)" : "inherit"}">${prepCount} / ${c.prepMax}</b> <span class="muted">+ ${c.domain.length} domain</span></span>
+          <span><span class="label">Prepared</span> <b class="num" style="color:${prepCount > c.prepMax ? "var(--bad)" : "inherit"}">${prepCount} / ${c.prepMax}</b> <span class="muted">+ ${c.domain.length} ${esc(alwaysLabel(c).toLowerCase())}</span></span>
         </div>
         <div class="slots">${slots}</div>
         <p class="small muted" style="margin:10px 0 0">Click a slot to mark it used. A long rest restores every slot. ${c.sub && c.sub.healBonus ? "Healing results include Disciple of Life." : ""}</p>
@@ -807,7 +867,7 @@
     const effect = effectLine(sp, sp.level, D);
     return `<div class="sp ${prep ? "" : "off"}">
       <div class="sp-head">${box}
-        <div style="min-width:0"><span class="sp-name" data-act="openSpell" data-name="${esc(sp.name)}">${esc(sp.name)}</span>${dom ? `<span class="badge dom">Domain</span>` : ""}${sp.conc ? `<span class="badge">Conc.</span>` : ""}${sp.ritual ? `<span class="badge">Ritual</span>` : ""}
+        <div style="min-width:0"><span class="sp-name" data-act="openSpell" data-name="${esc(sp.name)}">${esc(sp.name)}</span>${dom ? `<span class="badge dom">${esc(alwaysLabel(c))}</span>` : ""}${sp.conc ? `<span class="badge">Conc.</span>` : ""}${sp.ritual ? `<span class="badge">Ritual</span>` : ""}
           <div class="sp-meta">${esc(sp.time)} · ${esc(sp.range)} · ${esc(sp.dur)}${effect ? " · " + effect : ""}</div></div>
         ${sp.level === 0 ? (sp.x.cantrip ? `<button class="btn sm" data-act="castCantrip" data-name="${esc(sp.name)}">${physical() ? "Use" : "Roll"}</button>` : "") : prep ? `<button class="btn sm" data-act="cast" data-name="${esc(sp.name)}">Cast</button>` : ""}
       </div>
@@ -906,8 +966,9 @@
                 ${physical() ? "" : `<button class="btn sm" data-act="recharge">Roll for me</button>`}
                 <button class="btn sm" data-act="breathReset">Mark ready</button>`}</div></div>
           ${dS.breathReady ? "" : `<p class="small muted" style="margin:0 0 6px">At the start of the dragon's turn, roll a d6 and enter it. On a 5 or 6 the breath is ready again.</p>`}
-          ${g.feats.filter((f) => f.kind === "Reaction").map((f) => `<div class="res"><div><b>${esc(f.name)}</b> <span class="small muted">reaction</span></div>
-            <div class="choice">${dS.guardUsed ? `<span class="chip warn">Used this round</span><button class="btn sm" data-act="guardReset">Reset</button>` : `<button class="btn sm arc" data-act="guard">Use (1d6${sg(g.m.con)})</button>`}</div></div>`).join("")}
+          ${g.feats.filter((f) => f.kind === "Reaction").slice(0, 1).map((f) => `<div class="res"><div><b>${esc(f.name)}</b> <span class="small muted">reaction${f.per === "short" ? " · once per short rest" : ""}</span></div>
+            <div class="choice">${dS.guardUsed ? `<span class="chip warn">${f.per === "short" ? "Used · back after a short rest" : "Used this round"}</span><button class="btn sm" data-act="guardReset">Reset</button>`
+              : `<button class="btn sm arc" data-act="guard">Use${f.dice ? ` (${f.dice}${sg(f.diceAbil ? g.m[f.diceAbil] : 0)})` : ""}</button>`}</div></div>`).join("")}
           <div class="res"><div><b>Bite</b> <span class="small muted">${sg(g.biteHit)} to hit</span></div><button class="btn sm" data-act="bite">${physical() ? "Attack" : "Roll attack"}</button></div>
         </section>
         <section class="panel"><h2>Bond & name</h2>
@@ -921,7 +982,7 @@
           <h2 class="big">${esc(nm)}</h2>
           <div class="small" style="font-style:italic">${g.tier.size} Dragon (${esc(K.title || "")}), unaligned · bonded to ${esc(S.name.split(" ")[0])}</div>
           <hr class="sb-rule">
-          <div class="sb-line"><b>Armor Class</b> ${g.ac} <span class="muted small">(13 + PB, natural armor)</span></div>
+          <div class="sb-line"><b>Armor Class</b> ${g.ac} <span class="muted small">(13 + PB, natural armor${g.acWhy.length ? "; " + esc(g.acWhy.join(", ")) : ""})</span></div>
           <div class="sb-line"><b>Hit Points</b> ${g.hpMax} <span class="muted small">(${DRAGON_RULES.hpBase} + rider level ${D.total} + CON ${sg(g.m.con)}${g.tier.hp ? " + growth " + g.tier.hp : ""})</span></div>
           <div class="sb-line"><b>Speed</b> ${esc(K.speed || "")}</div>
           <hr class="sb-rule">
@@ -930,6 +991,7 @@
           <div class="sb-line"><b>Saving Throws</b> ${saves}</div>
           <div class="sb-line"><b>Damage Immunities</b> ${esc(K.immunities || "—")}</div>
           <div class="sb-line"><b>Senses</b> ${esc(K.senses || "")}, passive Perception ${g.pp}</div>
+          ${K.languages ? `<div class="sb-line"><b>Languages</b> ${esc(K.languages)}</div>` : ""}
           <div class="sb-line"><b>Proficiency Bonus</b> ${sg(g.pb)}</div>
           <h3 style="margin-top:14px;color:var(--bronze);border-bottom:1px solid var(--line);padding-bottom:3px">Actions & abilities</h3>
           <p class="sb-act"><b><i>Bite.</i></b> Melee: ${sg(g.biteHit)} to hit, reach ${esc(K.bite ? K.bite.reach : "5 ft.")} Hit: ${esc(K.bite ? K.bite.dice : "1d6")}${sg(g.m.str)} ${esc(K.bite ? K.bite.type : "piercing")}.</p>
@@ -1102,7 +1164,7 @@
     return `<div class="modal lu" role="dialog" aria-modal="true" aria-labelledby="lu-title">
       <header><div><div class="label">Level up</div><h2 id="lu-title">${esc(S.name)} · Level ${P.before.total} → ${P.after.total}</h2></div><button class="icon-btn" data-act="closeModal" aria-label="Close">✕</button></header>
       <nav class="lu-nav" aria-label="Level-up steps">${nav}</nav>
-      <div class="mb"><div class="tip">${LU_TIPS[L.step]}</div>${body}</div>
+      <div class="mb"><div class="tip">${(L.step === "spells" && P.C.spellTip) || LU_TIPS[L.step]}</div>${body}</div>
       <footer>
         <span class="small ${missing ? "warn-t" : "muted"}" style="margin-right:auto">${missing ? `${missing} choice${missing > 1 ? "s" : ""} still needed` : "All choices made"}</span>
         ${idx > 0 ? `<button class="btn" data-act="luStep" data-k="${steps[idx - 1][0]}">Back</button>` : `<button class="btn" data-act="closeModal">Cancel</button>`}
@@ -1170,7 +1232,7 @@
     if (P.after.pb !== P.before.pb) cards.push(featCard("pb", "Proficiency Bonus Increase", `Every character · Level ${P.after.total}`,
       `Your proficiency bonus rises from ${sg(P.before.pb)} to ${sg(P.after.pb)}. Every skill, save and attack you're proficient in improves by 1${P.after.caster ? ", and so do your spell save DC and spell attack" : ""}.`, 0, "", L));
     if ([5, 11, 17].includes(P.after.total) && P.after.caster) cards.push(featCard("ct", "Cantrip Damage Increase", `Every caster · Level ${P.after.total}`,
-      `Damage cantrips roll one more die. Sacred Flame now deals ${1 + (P.after.total >= 5) + (P.after.total >= 11) + (P.after.total >= 17)}d8.`, 0, "", L));
+      `Damage cantrips now roll ${1 + (P.after.total >= 5) + (P.after.total >= 11) + (P.after.total >= 17)} dice instead of ${(P.after.total >= 5) + (P.after.total >= 11) + (P.after.total >= 17)}.`, 0, "", L));
     return cards.join("") || `<p class="muted">No new features at this level, but your hit points still grow.</p>`;
   }
   function featCard(key, name, meta, text, need, choice, L) {
@@ -1237,7 +1299,7 @@
     const rowB = Array.from({ length: n }, (_, i) => `<td class="num">${P.before.slots[i] || "–"}</td>`).join("");
     const rowA = Array.from({ length: n }, (_, i) => `<td class="num ${(P.after.slots[i] || 0) !== (P.before.slots[i] || 0) ? "cur" : ""}">${P.after.slots[i] || "–"}</td>`).join("");
     const newLevel = P.after.slots.length > P.before.slots.length ? P.after.slots.length : 0;
-    const list = (window.SPELLS[P.C.spellcasting.list] || []).map((r) => SPELL_INDEX[r[0]]).filter((sp) => sp.level >= 1 && sp.level <= P.after.maxSpellLevel);
+    const list = spellsAvailable(a).map((r) => SPELL_INDEX[r[0]]).filter((sp) => sp.level >= 1 && sp.level <= P.after.maxSpellLevel);
     const prepared = L.prepared || S.prepared;
     const count = prepared.filter((nm) => SPELL_INDEX[nm] && SPELL_INDEX[nm].level <= P.after.maxSpellLevel && !a.domain.includes(nm)).length;
     let groups = "";
@@ -1253,11 +1315,11 @@
         <div class="tw"><table class="t prog"><thead><tr><th></th>${head}</tr></thead><tbody><tr><td class="label">Now</td>${rowB}</tr><tr><td class="label">Level ${P.after.total}</td>${rowA}</tr></tbody></table></div>
         ${newLevel ? `<p style="margin:6px 0 0"><span class="chip ok">New</span> You can now cast <b>${ORD[newLevel]}-level</b> spells.</p>` : ""}</div>
       <div class="opt-grid">
-        <div class="result"><span class="label">Spells you can prepare</span><div class="diff" style="font-size:1.2rem">${b ? b.prepMax : 0} → <span class="to">${a.prepMax}</span></div><span class="small muted">${ABIL_NAME[a.ability]} modifier + ${esc(P.C.name.toLowerCase())} level</span></div>
+        <div class="result"><span class="label">Spells you can prepare</span><div class="diff" style="font-size:1.2rem">${b ? b.prepMax : 0} → <span class="to">${a.prepMax}</span></div><span class="small muted">${ABIL_NAME[a.ability]} modifier + ${esc(P.C.prepLabel || P.C.name.toLowerCase() + " level")}</span></div>
         <div class="result"><span class="label">Spell save DC</span><div class="diff" style="font-size:1.2rem">${b ? b.dc : "—"} → <span class="to">${a.dc}</span></div><span class="small muted">8 + proficiency + ${ABIL_NAME[a.ability]}</span></div>
         <div class="result"><span class="label">Spell attack</span><div class="diff" style="font-size:1.2rem">${b ? sg(b.atk) : "—"} → <span class="to">${sg(a.atk)}</span></div><span class="small muted">proficiency + ${ABIL_NAME[a.ability]}</span></div>
       </div>
-      ${P.newDomain.length ? `<p style="margin:0"><b>New domain spells</b> (always prepared): ${P.newDomain.map(esc).join(", ")}</p>` : ""}
+      ${P.newDomain.length ? `<p style="margin:0"><b>New ${esc(alwaysLabel(a).toLowerCase())} spells</b> (always prepared): ${P.newDomain.map(esc).join(", ")}</p>` : ""}
       ${P.cantripHome === "spells" && P.cantripGain ? `<div class="fcard ${P.cantripNeed ? "need" : ""}"><div class="fbody">${needBadge(P.cantripNeed)}${cantripChoice(P, L)}</div></div>` : ""}
       <div><div class="ph"><h3 style="color:var(--bronze)">Prepared spells <span class="small muted" style="font-family:var(--f-body)">optional</span></h3>
           <span class="chip ${count > a.prepMax ? "warn" : count === a.prepMax ? "ok" : ""}">${count} / ${a.prepMax} prepared</span></div>
@@ -1299,7 +1361,7 @@
       const sl = []; P.after.slots.forEach((n, i) => { if (n !== (P.before.slots[i] || 0)) sl.push(`${ORD[i + 1]}: ${P.before.slots[i] || 0} → <b>${n}</b>`); });
       const parts = [sl.length ? "Slots " + sl.join(", ") : "Slots unchanged"];
       if (P.before.caster && P.before.caster.prepMax !== P.after.caster.prepMax) parts.push(`prepare ${P.after.caster.prepMax}`);
-      if (P.newDomain.length) parts.push("domain: " + P.newDomain.map(esc).join(", "));
+      if (P.newDomain.length) parts.push(esc(alwaysLabel(P.after.caster).toLowerCase()) + ": " + P.newDomain.map(esc).join(", "));
       const cn = (L.cantrips || []).filter(Boolean);
       if (P.cantripGain) parts.push(P.cantripNeed ? `<span class="warn-t">pick ${P.cantripNeed} cantrip</span>` : "cantrip: " + cn.map(esc).join(", "));
       add("Spells", parts.join(" · "), P.cantripNeed ? P.cantripHome : "spells");
@@ -1390,7 +1452,7 @@
           ${MODAL.importOpen ? `<textarea id="imp-box" class="f" rows="5" style="margin-top:8px;font-size:.75rem" placeholder="Paste copied sheet data here"></textarea><button class="btn sm" style="margin-top:6px" data-act="importJson">Load pasted data</button>` : ""}
         </div>
         <div class="lu-sec"><h3>Start over</h3>
-          ${MODAL.confirmReset ? `<div class="choice"><span class="small">Replace this sheet with Corbin's level ${window.DEFAULT_CHARACTER.classes[0].level} starting sheet?</span><button class="btn sm danger" data-act="resetSheet">Yes, reset</button><button class="btn sm" data-act="optSet" data-k="confirmReset" data-v="">Keep my sheet</button></div>`
+          ${MODAL.confirmReset ? `<div class="choice"><span class="small">Replace this sheet with ${esc(window.DEFAULT_CHARACTER.name.split(" ")[0])}'s level ${window.DEFAULT_CHARACTER.classes[0].level} starting sheet?</span><button class="btn sm danger" data-act="resetSheet">Yes, reset</button><button class="btn sm" data-act="optSet" data-k="confirmReset" data-v="">Keep my sheet</button></div>`
             : `<button class="btn sm danger" data-act="optSet" data-k="confirmReset" data-v="1">Reset to starting sheet</button>`}
         </div>
         <p class="small muted" style="margin:0">Rules: D&D 5e (2014). Dragon bond rules version ${esc(DRAGON_RULES.version)}.</p>
@@ -1542,9 +1604,12 @@
     },
     breathReset: () => { S.dragon.breathReady = true; commit(); },
     guard: () => {
-      const g = derive().dragon; S.dragon.guardUsed = true; commit();
-      if (physical()) { toast(`Lightning Guard: reduce damage by 1d6 ${sg(g.m.con)}`, "Roll the d6, add the modifier, and subtract it from the hit."); return; }
-      const r = roll("1d6"); toast(`Lightning Guard: reduce damage by <b class="num">${Math.max(0, r.total + g.m.con)}</b>`, `1d6 ${r.detail} ${sg(g.m.con)}`);
+      const g = derive().dragon; const f = g.feats.find((x) => x.kind === "Reaction"); if (!f) return;
+      S.dragon.guardUsed = true; commit();
+      if (!f.dice) { toast(`${esc(f.name)} used`, esc(f.text)); return; }
+      const bm = f.diceAbil ? g.m[f.diceAbil] : 0; const verb = f.verb || "roll";
+      if (physical()) { toast(`${esc(f.name)}: ${esc(verb)} ${f.dice} ${sg(bm)}`, "Roll the dice and add the modifier."); return; }
+      const r = roll(f.dice); toast(`${esc(f.name)}: ${esc(verb)} <b class="num">${Math.max(0, r.total + bm)}</b>`, `${f.dice} ${r.detail} ${sg(bm)}`);
     },
     guardReset: () => { S.dragon.guardUsed = false; commit(); },
     bite: () => {
@@ -1583,6 +1648,26 @@
     addExtraSpell: () => { S.extraSpells.push({ name: "", level: 1, notes: "" }); commit(); },
     delExtraSpell: (e) => { S.extraSpells.splice(+e.dataset.i, 1); commit(); },
     artReset: (e) => saveArt(e.dataset.k, null),
+    // option panels
+    panelToggle: (e) => {
+      const D = derive(); const pc = panelsFor(D).find((x) => x.P.id === e.dataset.p); if (!pc) return;
+      const { P, c } = pc; const st = S.panels[P.id]; const k = e.dataset.k; const o = P.options.find((x) => x.key === k);
+      if (st.active[k] != null) { delete st.active[k]; commit(); return; }
+      const max = P.active ? P.active(c.level) : Infinity;
+      if (Object.keys(st.active).length >= max) { toast(`All ${esc(P.activeLabel || "slots")} in use`, `You can have ${max} at once. End one first.`); return; }
+      st.active[k] = o.own || P.defaultTarget === "own" ? S.dragon.name || "" : "";
+      commit();
+      const el = document.getElementById(`f-panels-${P.id}-active-${k}`); if (el && !el.value) el.focus();
+    },
+    panelKnow: (e) => {
+      const D = derive(); const pc = panelsFor(D).find((x) => x.P.id === e.dataset.p); if (!pc) return;
+      const st = S.panels[pc.P.id]; const k = e.dataset.k; const max = pc.P.known(pc.c.level); const set = new Set(st.known || []);
+      if (set.has(k)) set.delete(k); else if (set.size >= max) { toast("Known limit reached", `You know ${max} at this level. Untick one first.`); render(); return; } else set.add(k);
+      st.known = [...set]; commit();
+    },
+    panelEdit: (e) => { UI.panelEdit = UI.panelEdit === e.dataset.p ? null : e.dataset.p; render(); },
+    panelUse: (e) => { const st = S.panels[e.dataset.p]; const k = e.dataset.k, j = +e.dataset.j; st.used[k] = (st.used[k] || 0) > j ? j : j + 1; commit(); },
+    panelCharge: (e) => { const st = S.panels[e.dataset.p]; const k = e.dataset.k, j = +e.dataset.j; st.charges[k] = (st.charges[k] || 0) > j ? j : j + 1; commit(); },
     // level up
     luHp: (e) => {
       const hd = CLASSES[MODAL.classId].hitDie; const k = e.dataset.k;
@@ -1607,8 +1692,12 @@
       MODAL.log.push(`d${hd}: ${r} ${sg(D.mods.con)} CON = <b>${gain}</b> HP`); commit();
     },
     finishShort: () => {
-      derive().resources.filter((r) => r.reset === "short").forEach((r) => (S.resUsed[r.id] = 0));
-      S.dragon.guardUsed = false; MODAL = null; commit(); toast("Short rest finished", "Channel Divinity restored.");
+      const D = derive(); const back = D.resources.filter((r) => r.reset === "short");
+      back.forEach((r) => (S.resUsed[r.id] = 0));
+      panelsFor(D).forEach(({ P }) => { const st = S.panels[P.id]; if (!st) return; P.options.forEach((o) => { if (o.uses && o.uses.reset === "short" && st.used[o.key]) { st.used[o.key] = 0; back.push({ name: o.name }); } }); });
+      if (S.dragon.guardUsed) { const f = D.dragon.feats.find((x) => x.kind === "Reaction"); if (f) back.push({ name: f.name }); }
+      S.dragon.guardUsed = false; MODAL = null; commit();
+      toast("Short rest finished", back.length ? esc(back.map((r) => r.name).join(", ")) + " restored." : "Hit dice spent; nothing else to restore.");
     },
     finishLong: () => { longRestNow(); MODAL = null; commit(); toast("Long rest finished", "HP, slots and features restored."); },
     // options

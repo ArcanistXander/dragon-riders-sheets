@@ -12,6 +12,7 @@ window.DEFAULT_CHARACTER = {
   classes: [{ id: "cleric", sub: "life", level: 3 }],
   abilities: { str: 8, dex: 14, con: 17, int: 14, wis: 20, cha: 14 },
   saveProf: ["wis", "cha"],
+  saveNote: "Advantage vs. frightened (Brave) and poison (Stout Resilience).",
   skills: { insight: 1, medicine: 1, religion: 1 },
   hp: { rolls: [8, 5, 6], misc: 0, current: 28, temp: 0 },
   hitDiceUsed: 0,
