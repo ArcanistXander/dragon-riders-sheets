@@ -239,6 +239,10 @@ input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15r
 .pk-roll input{width:auto;accent-color:var(--accent)}
 span.chip{border:1px solid var(--rule);display:inline-block}
 .ini-who .conds.wide{max-width:none}
+.lvl-tag{margin-top:4px;font-size:.78rem;font-weight:700;color:var(--muted)}
+.lvl-tag span{font-weight:400}
+.lvl-tag.on{color:var(--accent)}
+.lvl-one{margin-top:4px;padding:1px 8px;font-size:.75rem}
 .ini-sub button.chip{padding:1px 8px}
 .foes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .foe{display:inline-flex}
@@ -757,6 +761,20 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
 
   // ---------- Rider rows ----------
   function inp(p,k,cls,ph,lbl){return '<input class="'+(cls||'')+'" id="'+k+'-'+p.id+'" data-id="'+p.id+'" data-k="'+k+'" value="'+esc(p[k])+'" placeholder="'+esc(ph||'')+'" aria-label="'+esc(p.name+' '+(lbl||k))+'">'}
+  // Milestone levelling: Level up on a rider's sheet stays locked until it's unlocked here (party/conds '<rider>'.lvl).
+  // Their sheet reports how many unlocks are still unused (live.lvlReady).
+  function lvlCtl(p){
+    var l=live(p); if(!l)return '';
+    var pe=pend(p.id).lvl, ready=+l.lvlReady||0;
+    if(pe)return '<div class="minor lvl-tag">⬆ Unlocking… <span>lands when their sheet is open</span></div>';
+    if(ready)return '<div class="lvl-tag on">⬆ Level-up unlocked'+(ready>1?' ×'+ready:'')+'</div>';
+    return '<button class="ghost lvl-one" data-lvlone="'+p.id+'" title="Unlock one level-up on '+esc(p.name)+'’s sheet">Unlock level-up</button>';
+  }
+  function unlockLevel(ids){
+    var sent=ids.filter(function(id){return sendCond(id,'lvl',{on:true})});
+    var paper=state.party.filter(function(p){return ids.indexOf(p.id)<0}).map(function(p){return p.name});
+    if(sent.length)statusMsg='Level-up unlocked for '+sent.map(function(id){return byId(id).name}).join(', ')+'. Their sheets celebrate and open Level up.'+(paper.length?' Not on a live sheet: '+paper.join(', ')+' (change their level on Edit sheet).':'');
+  }
   function riderRow(p){
     var c=crit(p.id), sn=speedNote(p.id), insp=inspOn(p.id), l=live(p), pi=l?pend(p.id).insp:null;
     if(editing){
@@ -774,7 +792,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     var f=String(p.fly||'').trim(), spd=l&&l.speed!=null?l.speed:p.speed;
     return '<tr class="rider"><td><div class="name">'+esc(p.name)+'</div><div class="race">'+esc((l&&l.race)||p.race||'—')+'</div>'+liveToggle(p)+
         '<div class="conds"><button class="chip insp'+(insp?' on':'')+(pi?' pend':'')+'" data-insp="'+p.id+'" aria-pressed="'+insp+'">Inspiration</button>'+(l&&l.hero?'<span class="chip insp on" title="Hero points (homebrew)">Hero pts '+(+l.hero)+'</span>':'')+'</div>'+condBlock(p.id,p.name)+'</td>'+
-      '<td class="cls"><span class="lvl">'+esc(l?l.level:p.level)+'</span>'+esc((l&&l.classes)||p.classes||'—')+'<div class="minor">Proficiency '+sg(pb(p))+'</div>'+(l?'<div class="live">● live</div>':'')+'</td>'+
+      '<td class="cls"><span class="lvl">'+esc(l?l.level:p.level)+'</span>'+esc((l&&l.classes)||p.classes||'—')+'<div class="minor">Proficiency '+sg(pb(p))+'</div>'+(l?'<div class="live">● live</div>':'')+lvlCtl(p)+'</td>'+
       '<td><div class="big">'+esc(stat(p,'ac')==null?'—':stat(p,'ac'))+'</div>'+(l?'<div class="live">● live</div>':'')+'</td>'+
       '<td>'+hpBlock(c)+'</td>'+
       '<td><span class="big">'+esc(spd||'—')+'</span> <span class="minor">ft</span>'+(sn?'<div class="spd">'+esc(sn)+'</div>':'')+
@@ -1309,7 +1327,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
         '<button id="add-btn">Add rider</button><button id="cancel-btn">Cancel</button><button class="primary" id="save-btn">Save changes</button>';
     } else {
       var anyClosed=state.party.some(function(p){return !play.open[p.id]});
-      tools=(ask==='long'?'<button class="primary" id="long-yes">Confirm long rest</button><button id="ask-no">Cancel</button>':'<button id="short-btn">Short rest</button><button id="long-btn">Long rest</button>')+allPaperBtn()+
+      tools=(ask==='long'?'<button class="primary" id="long-yes">Confirm long rest</button><button id="ask-no">Cancel</button>':
+          ask==='lvl'?'<button class="primary" id="lvl-yes">Yes, unlock a level for every rider</button><button id="ask-no">Cancel</button>':
+          '<button id="short-btn">Short rest</button><button id="long-btn">Long rest</button><button id="lvl-btn" title="Milestone: unlock Level up on every rider’s sheet">Milestone level up</button>')+allPaperBtn()+
         (onInit?'':'<button id="fold-btn">'+(anyClosed?'Show all dragons':'Hide all dragons')+'</button>')+'<button id="export-btn">Export backup</button><button id="import-btn">Import backup</button><button class="primary" id="edit-btn">Edit sheet</button>';
     }
     root.innerHTML='<header><div><h1>Dragon Riders of Arcanum</h1><p class="sub">The Homies · Isle of Droojh · D&amp;D 5e · updated '+esc(state.updated)+'</p></div>'+
@@ -1401,6 +1421,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='cancel-btn'){state=JSON.parse(backup);editing=false;dirty=false;ask='';render();}
     else if(t.id==='restore-btn'){ask='restore';render();}
     else if(t.id==='long-btn'){ask='long';render();}
+    else if(t.id==='lvl-btn'){if(!liveIds().length){statusMsg='No rider is on a live sheet. Change levels on Edit sheet.';render();return}ask='lvl';render();var ly=document.getElementById('lvl-yes');if(ly)ly.focus();return}
+    else if(t.id==='lvl-yes'){ask='';unlockLevel(liveIds());render();var lb2=document.getElementById('lvl-btn');if(lb2)lb2.focus();return}
+    else if(ds.lvlone){unlockLevel([ds.lvlone]);render();return}
     else if(t.id==='ask-no'){ask='';render();}
     else if(t.id==='restore-yes'){var kf=state.foes,ke=state.encs;state=JSON.parse(DEFAULTS);state.foes=kf;state.encs=ke;fixParty();ask='';dirty=true;render();}
     else if(t.id==='short-btn'){shortRest();savePlay();statusMsg='Short rest: tandem uses, short-rest abilities and breath weapons restored. Spend Hit Dice to heal.'+shortLive();render();}

@@ -6,6 +6,7 @@
 (function(){
   'use strict';
   if(window.claude&&window.claude.use)return;   // on claude.ai: keep its own store
+  window.DR_MILESTONE=true;   // website: milestone levelling, so Level up waits for the DM's unlock from the party sheet
   var FB=window.FIREBASE_SDK_BASE||'https://www.gstatic.com/firebasejs/10.12.2/';
   var cfg=window.FIREBASE_CONFIG||{};
   var configured=!!(cfg.apiKey&&cfg.projectId&&!/^PASTE/.test(cfg.apiKey));

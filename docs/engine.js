@@ -385,7 +385,7 @@
         level: D.total, classes: classLine(D), race: S.race, ac: D.ac, init: D.init, speed: D.speed, pp: D.passive("perception", "wis"),
         dc: c ? c.dc : null, saves, saveProf: S.saveProf.concat(D.fx.saves),
         hp: { cur: Math.min(S.hp.current, D.hpMax), max: D.hpMax, temp: S.hp.temp || 0 }, death: S.death,
-        conds, exh: +S.exhaustion || 0, insp: !!S.inspiration, hero: S.heroPoints, conc: S.concentration || "", defenses: S.defenses || ""
+        conds, exh: +S.exhaustion || 0, insp: !!S.inspiration, lvlReady: S.levelGrant || 0, hero: S.heroPoints, conc: S.concentration || "", defenses: S.defenses || ""
       },
       dragon: {
         // base AC: the party sheet adds Dragonwarden wards itself
@@ -406,6 +406,110 @@
     S.dragon.hpCurrent = null; S.dragon.hpTemp = 0; S.dragon.breathReady = true; S.dragon.guardUsed = false; S.dragon.essenceUsed = 0; S.dragon.used = {};
     if (S.dm && S.dm.shortCall) S.dm.shortDone = S.dm.shortCall; // a long rest covers a short rest the DM called
   }
+  /* Milestone levelling (website only, where the DM's party sheet can reach the sheets): Level up stays locked until the
+     DM unlocks it from the party sheet. Each unlock adds one to S.levelGrant; finishing a level-up uses it. On claude.ai
+     there is no party sheet, so the button stays open there. */
+  function milestone() { return !!window.DR_MILESTONE; }
+  function levelLocked() { return milestone() && !((S.levelGrant || 0) > 0); }
+  // The DM unlocked a level: streamers, confetti and horns.
+  function levelParty() {
+    const old = document.getElementById("lvl-party"); if (old) old.remove();
+    if (!document.getElementById("lvl-party-css")) {
+      const st = document.createElement("style"); st.id = "lvl-party-css";
+      st.textContent = `
+#lvl-party{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:color-mix(in srgb,#000 55%,transparent);padding:16px}
+#lvl-party canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#lvl-party .lp-card{position:relative;max-width:440px;width:100%;text-align:center;background:var(--panel);color:var(--ink);border:3px solid var(--bronze);border-radius:16px;padding:22px 20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.45);animation:lp-pop .55s cubic-bezier(.2,1.6,.4,1)}
+#lvl-party .lp-horns{font-size:2.6rem;line-height:1;display:flex;justify-content:center;gap:18px}
+#lvl-party .lp-horns span{display:inline-block;animation:lp-toot .5s ease-in-out 3 alternate}
+#lvl-party .lp-horns span:last-child{transform:scaleX(-1);animation-name:lp-toot2}
+#lvl-party h2{font-size:1.6rem;margin:10px 0 6px;color:var(--bronze);line-height:1.2}
+#lvl-party p{margin:0 0 14px;color:var(--muted)}
+#lvl-party .lp-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.lvl-ready{animation:lp-glow 1.6s ease-in-out infinite}
+@keyframes lp-pop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes lp-toot{from{transform:rotate(-12deg) scale(1)}to{transform:rotate(8deg) scale(1.25)}}
+@keyframes lp-toot2{from{transform:scaleX(-1) rotate(-12deg) scale(1)}to{transform:scaleX(-1) rotate(8deg) scale(1.25)}}
+@keyframes lp-glow{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--bronze) 35%,transparent)}}
+@media (prefers-reduced-motion:reduce){#lvl-party .lp-card,#lvl-party .lp-horns span,.lvl-ready{animation:none}}`;
+      document.head.appendChild(st);
+    }
+    const wrap = document.createElement("div"); wrap.id = "lvl-party";
+    wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-modal", "true"); wrap.setAttribute("aria-labelledby", "lp-title");
+    wrap.innerHTML = `<canvas aria-hidden="true"></canvas><div class="lp-card">
+      <div class="lp-horns" aria-hidden="true"><span>📯</span><span>🎉</span><span>📯</span></div>
+      <h2 id="lp-title">Congratulations Riders, you leveled up!</h2>
+      <p>Your DM unlocked level ${derive().total + 1} for ${esc(S.name || "you")}${S.dragon.name ? " and " + esc(S.dragon.name) : ""}.</p>
+      <div class="lp-btns"><button class="btn primary" data-lp="go">Level up now</button><button class="btn" data-lp="later">Later</button></div></div>`;
+    document.body.appendChild(wrap);
+    const back = document.activeElement;
+    let stop = false;
+    const close = () => { stop = true; wrap.remove(); document.removeEventListener("keydown", key, true); if (back && back.focus) try { back.focus(); } catch (e) { /* gone */ } };
+    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    document.addEventListener("keydown", key, true);
+    wrap.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-lp]"); if (!b) return;
+      close(); if (b.dataset.lp === "go") A.levelUp();
+    });
+    wrap.querySelector('[data-lp="go"]').focus();
+    fanfare(wrap);
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // confetti and curly streamers falling from the top for a few seconds
+    const cv = wrap.querySelector("canvas"), cx = cv.getContext("2d"), dpr = window.devicePixelRatio || 1;
+    const size = () => { cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+    size(); addEventListener("resize", size);
+    const cols = ["#e8b04a", "#d9965a", "#6db6ff", "#e05a7a", "#62c370", "#b07ae8", "#fff1c1"], W = () => innerWidth, H = () => innerHeight;
+    const bits = [], t0 = performance.now();
+    for (let i = 0; i < 160; i++) bits.push({ k: "c", x: Math.random() * W(), y: -Math.random() * H(), vx: (Math.random() - .5) * 2, vy: 2 + Math.random() * 3, r: Math.random() * 6.28, vr: (Math.random() - .5) * .3, w: 6 + Math.random() * 6, h: 4 + Math.random() * 6, c: cols[i % cols.length] });
+    for (let i = 0; i < 18; i++) bits.push({ k: "s", x: Math.random() * W(), y: -Math.random() * H() * .3 - 20, vy: 1.6 + Math.random() * 1.6, ph: Math.random() * 6.28, len: 80 + Math.random() * 90, c: cols[i % cols.length] });
+    let last = t0;
+    (function frame(now) {
+      if (stop || !cv.isConnected) { removeEventListener("resize", size); return; }
+      const el = now - t0, k = Math.min(4, (now - last) / 16.7); last = now; cx.clearRect(0, 0, W(), H()); // k: same speed at any frame rate
+      bits.forEach((b) => {
+        b.y += b.vy * k; if (el < 4500 && b.y > H() + 20) b.y = -20 - Math.random() * 80;
+        if (b.k === "c") {
+          b.x += (b.vx + Math.sin((el / 400) + b.r) * .6) * k; b.r += b.vr * k;
+          cx.save(); cx.translate(b.x, b.y); cx.rotate(b.r); cx.fillStyle = b.c; cx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h * Math.abs(Math.cos(b.r * 2))); cx.restore();
+        } else {
+          cx.beginPath(); cx.strokeStyle = b.c; cx.lineWidth = 3; cx.lineCap = "round";
+          for (let j = 0; j <= 24; j++) { const yy = b.y - (j / 24) * b.len, xx = b.x + Math.sin(b.ph + el / 300 + j / 3) * 10; j ? cx.lineTo(xx, yy) : cx.moveTo(xx, yy); }
+          cx.stroke();
+        }
+      });
+      if (el < 9000) requestAnimationFrame(frame); else cx.clearRect(0, 0, W(), H());
+    })(t0);
+  }
+  // Two brassy horns play a short fanfare, then a party-blower squeal. Browsers may hold sound until the page has
+  // been touched; then it plays on the first tap inside the pop-up.
+  function fanfare(wrap) {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    let ac; try { ac = new AC(); } catch (e) { return; }
+    const play = () => {
+      const t = ac.currentTime + .05, out = ac.createGain(); out.gain.value = .22; out.connect(ac.destination);
+      const horn = (f, at, dur) => [0, 7].forEach((det) => {
+        const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter();
+        o.type = "sawtooth"; o.frequency.value = f; o.detune.value = det; lp.type = "lowpass"; lp.frequency.setValueAtTime(600, at); lp.frequency.linearRampToValueAtTime(2600, at + .06);
+        g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(.5, at + .04); g.gain.setValueAtTime(.5, at + dur - .06); g.gain.linearRampToValueAtTime(0, at + dur);
+        o.connect(lp); lp.connect(g); g.connect(out); o.start(at); o.stop(at + dur + .02);
+      });
+      // ta-ta-ta-taaa, ta-da!
+      [[392, 0, .14], [392, .16, .14], [392, .32, .14], [523, .48, .5], [466, 1.0, .16], [523, 1.18, .7]].forEach(([f, a, d]) => horn(f, t + a, d));
+      [[659, .48, .5], [587, 1.0, .16], [659, 1.18, .7]].forEach(([f, a, d]) => horn(f, t + a, d));
+      const o = ac.createOscillator(), g = ac.createGain(), b = t + 2.0;
+      o.type = "square"; o.frequency.setValueAtTime(700, b); o.frequency.exponentialRampToValueAtTime(1500, b + .35); o.frequency.exponentialRampToValueAtTime(1100, b + .6);
+      g.gain.setValueAtTime(0, b); g.gain.linearRampToValueAtTime(.18, b + .03); g.gain.setValueAtTime(.18, b + .5); g.gain.linearRampToValueAtTime(0, b + .65);
+      o.connect(g); g.connect(out); o.start(b); o.stop(b + .7);
+      setTimeout(() => { try { ac.close(); } catch (e) { /* closed */ } }, 3500);
+    };
+    let played = false; const go = () => { if (!played && ac.state === "running") { played = true; play(); } };
+    if (ac.state === "suspended") {
+      ac.resume().then(go, () => {});
+      const once = () => { wrap.removeEventListener("pointerdown", once, true); ac.resume().then(go, () => {}); };
+      wrap.addEventListener("pointerdown", once, true);
+    } else go();
+  }
+  window.DR_LEVEL_PARTY = levelParty; // for a preview of the pop-up from the browser console
   // The DM called a short rest for the party: open the Short rest window (spending hit dice stays the player's choice).
   function dmShortRest() {
     if (!MODAL || MODAL.type === "shortRest") { MODAL = { type: "shortRest", log: (MODAL && MODAL.log) || [] }; renderModal(); }
@@ -527,13 +631,14 @@
       if (msg.length) { commit(); toast("From the DM", msg.map(esc).join("<br>"), 7000); }
     }, () => {});
     db.doc("party/conds").onSnapshot((s) => {
-      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = [];
+      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = []; let celebrate = false;
       const first = !seen.condLinked; seen.condLinked = true; let changed = first;
       Object.keys(mine2).forEach((k) => {
         const v = mine2[k] || {}, at = String(v.at || "");
         if (!at || at <= (seen.cond[k] || "")) return; seen.cond[k] = at; changed = true;
         if (first) return; // first link: skip what was sent before
         if (k === "exh") { const x = Math.max(0, Math.min(6, +v.v || 0)); if (x !== +S.exhaustion) { S.exhaustion = x; msg.push(`exhaustion ${x}`); } return; }
+        if (k === "lvl") { S.levelGrant = (S.levelGrant || 0) + 1; celebrate = true; return; }
         if (k === "insp") { if (!!v.on !== !!S.inspiration) { S.inspiration = !!v.on; msg.push(v.on ? "inspiration" : "removed inspiration"); } return; }
         if (k === "concentrating") {
           if (!v.on && S.concentration) { msg.push(`ended concentration on ${S.concentration}`); S.concentration = ""; }
@@ -543,7 +648,8 @@
         const c = CONDITIONS.find((x) => x[0] === k); if (!c) return;
         if (S.conds.includes(k) !== !!v.on) { S.conds = v.on ? S.conds.concat(k) : S.conds.filter((x) => x !== k); msg.push((v.on ? "" : "removed ") + c[1].toLowerCase()); }
       });
-      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (changed) persist();
+      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (celebrate) commit(); else if (changed) persist();
+      if (celebrate) levelParty();
     }, () => {});
     db.doc("party/rest").onSnapshot((s) => {
       if (!s.exists) return; const d = s.data() || {}, at = String(d.at || ""), sh = String(d.shortAt || ""), seen = dmSeen();
@@ -649,7 +755,8 @@
         </div>
       </div>
       <div class="hero-actions">
-        <button class="btn primary" data-act="levelUp" ${D.total >= 20 ? "disabled" : ""}>Level up</button>
+        ${levelLocked() ? `<button class="btn" data-act="levelUp" aria-disabled="true" title="Milestone levelling: your DM unlocks this from the party sheet">🔒 Level up</button>`
+          : `<button class="btn primary${milestone() ? " lvl-ready" : ""}" data-act="levelUp" ${D.total >= 20 ? "disabled" : ""}>${milestone() ? "⬆ Level up!" : "Level up"}</button>`}
         <button class="btn" data-act="shortRest">Short rest</button>
         <button class="btn" data-act="longRest">Long rest</button>
         <button class="btn" data-act="toggleEdit" aria-pressed="${UI.edit}">${UI.edit ? "Done editing" : "Edit sheet"}</button>
@@ -1755,6 +1862,8 @@
     if (ab.length) summary.push(ab.join(", "));
     const cn = (MODAL.cantrips || []).filter(Boolean); if (cn.length) summary.push("Cantrip: " + cn.join(", "));
     next.history = (S.history || []).concat([{ at: Date.now(), from: P.before.total, to: P.after.total, summary: summary.join(" · "), snapshot: snap }]).slice(-8);
+    next.dm = S.dm; // what the DM sent while the wizard was open still counts
+    next.levelGrant = Math.max(0, (S.levelGrant || 0) - 1); // milestone: this level-up uses the DM's unlock
     S = migrate(next); MODAL = null; commit();
     toast(`Level ${P.after.total}!`, `${summary.join(" · ")} · HP max ${P.before.hpMax} → ${P.after.hpMax}`, 6000);
   }
@@ -1849,6 +1958,7 @@
     toggleEdit: () => { UI.edit = !UI.edit; render(); },
     settings: () => { MODAL = { type: "settings" }; renderModal(); },
     levelUp: () => {
+      if (levelLocked()) { toast("Level up is locked", "This is a milestone game: your DM unlocks levelling up from the party sheet."); return; }
       MODAL = { type: "levelUp", step: "class", classId: S.classes[0].id, hpVal: null, hpMode: null, asiMode: "asi", asiSplit: false, asiA: "", asiB: "",
         feat: "", featAbil: "", customName: "", customText: "", cantrips: [], prepared: S.prepared.slice(), closed: {}, seen: {} };
       renderModal();
@@ -2164,7 +2274,9 @@
     // options
     optSet: (e) => { MODAL[e.dataset.k] = e.dataset.v; renderModal(); },
     undoLevel: () => {
-      const h = S.history.pop(); const keep = S.history; S = migrate(Object.assign(h.snapshot, { history: keep }));
+      // the DM's unlock comes back with the undo, so the level can be taken again
+      const h = S.history.pop(); const keep = S.history, dm = S.dm, grant = (S.levelGrant || 0) + (milestone() ? 1 : 0);
+      S = migrate(Object.assign(h.snapshot, { history: keep, dm, levelGrant: grant }));
       MODAL = null; commit(); toast(`Back to level ${h.from}`, "The last level-up was undone.");
     },
     exportJson: () => {
