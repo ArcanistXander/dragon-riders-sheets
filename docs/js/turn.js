@@ -58,7 +58,17 @@
     '.tt-root button{font:inherit;font-size:.9rem;border-radius:6px;padding:6px 12px;cursor:pointer;border:1px solid var(--tt-rule);background:var(--tt-bg);color:var(--tt-ink)}'+
     '.tt-root button:hover{border-color:var(--tt-acc)}.tt-root button:focus-visible{outline:2px solid var(--tt-acc);outline-offset:2px}'+
     '.tt-root button.pri{background:var(--tt-acc);border-color:var(--tt-acc);color:var(--tt-acc-ink)}.tt-root button:disabled{opacity:.45;cursor:not-allowed}'+
-    '.tt-pill{position:fixed;right:12px;bottom:12px;z-index:900;max-width:calc(100% - 24px);box-sizing:border-box;background:var(--tt-bg);border:1px solid var(--tt-rule);border-radius:999px;padding:6px 8px 6px 14px;box-shadow:0 4px 18px rgba(0,0,0,.2);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:.88rem}'+
+    '.tt-dock{position:fixed;right:12px;bottom:12px;z-index:900;max-width:calc(100% - 24px);display:flex;flex-direction:column;align-items:flex-end;gap:8px}'+
+    '.tt-ord{width:min(300px,calc(100vw - 24px));box-sizing:border-box;background:var(--tt-bg);border:1px solid var(--tt-rule);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.2);overflow:hidden}'+
+    '.tt-ord header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 6px 6px 12px;border-bottom:1px solid var(--tt-rule)}'+
+    '.tt-ord header b{font-family:"Marcellus SC",Georgia,serif;font-weight:400;font-size:1rem}.tt-root .tt-ord header button{padding:2px 10px}'+
+    '.tt-ord ol{list-style:none;margin:0;padding:4px 0;max-height:min(45vh,340px);overflow:auto}'+
+    '.tt-ord li{display:flex;align-items:center;gap:8px;padding:4px 12px;font-size:.92rem}'+
+    '.tt-ord li .mk{width:1em;color:var(--tt-acc);font-weight:700}.tt-ord li.cur{background:color-mix(in srgb,var(--tt-acc) 14%,transparent);font-weight:700}'+
+    '.tt-ord li.me .nm{color:var(--tt-acc);font-weight:700}.tt-ord li.foe .nm{color:var(--tt-muted)}.tt-ord li.down .nm{text-decoration:line-through}'+
+    '.tt-ord .tg{margin-left:auto;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tt-muted)}'+
+    '.tt-root button.tt-tab{border-radius:999px;box-shadow:0 4px 18px rgba(0,0,0,.2);font-weight:700}'+
+    '.tt-pill{box-sizing:border-box;max-width:100%;background:var(--tt-bg);border:1px solid var(--tt-rule);border-radius:999px;padding:6px 8px 6px 14px;box-shadow:0 4px 18px rgba(0,0,0,.2);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:.88rem}'+
     '.tt-pill.mine,.tt-pill.next{border:2px solid var(--tt-acc)}.tt-pill b{color:var(--tt-acc)}.tt-pill .tt-btns{display:flex;gap:6px}'+
     '.tt-pill .tt-msg{flex-basis:100%;color:var(--tt-warn);font-size:.8rem}'+
     '.tt-veil{position:fixed;inset:0;z-index:1001;display:grid;place-items:center;padding:16px;background:rgba(10,8,16,.55)}'+
@@ -72,6 +82,18 @@
   var layer=document.createElement('div'); layer.className='tt-root';   // the pop-up, kept apart so redrawing the bar never removes it
   function mount(){if(!root.parentNode)document.body.appendChild(root);if(!layer.parentNode)document.body.appendChild(layer)}
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  /* The turn order from the DM's tracker, only while combat runs. Minimizing it lasts for that fight; a new fight opens it again. */
+  var MINKEY=KEY+'-min';
+  function minimized(){try{return !!round&&localStorage.getItem(MINKEY)===round.cid}catch(e){return false}}
+  function setMin(on){try{if(on)localStorage.setItem(MINKEY,round.cid);else localStorage.removeItem(MINKEY)}catch(e){}draw()}
+  function orderBox(){
+    var L=round&&round.order||[]; if(!L.length) return '';
+    if(minimized()) return '<button class="tt-tab" data-tt="show" aria-expanded="false">⚔ Turn order · round '+round.round+'</button>';
+    return '<section class="tt-ord" aria-label="Turn order"><header><b>Turn order · round '+round.round+'</b><button data-tt="hide" aria-expanded="true" aria-label="Minimize turn order" title="Minimize">–</button></header>'+
+      '<ol>'+L.map(function(o){var me=o.id===ME;
+        return '<li class="'+(o.cur?'cur ':'')+(me?'me ':'')+(o.id?'':'foe ')+(o.down?'down':'')+'"'+(o.cur?' aria-current="true"':'')+'><span class="mk" aria-hidden="true">'+(o.cur?'▶':'')+'</span>'+
+          '<span class="nm">'+esc(o.n)+(me?' (you)':'')+'</span>'+(o.held?'<span class="tg">Holding</span>':o.down?'<span class="tg">Down</span>':'')+'</li>'}).join('')+'</ol></section>';
+  }
   function draw(){
     mount();
     var h='', wait=sent?' disabled':'';
@@ -87,9 +109,15 @@
       h='<div class="tt-pill next"><span><b>Roll initiative</b> for the DM</span><button class="pri" data-tt="roll">Roll</button></div>';
     else if(rolledTxt)
       h='<div class="tt-pill"><span>'+esc(rolledTxt)+' · waiting for the fight to start</span></div>';
-    root.innerHTML=h;
+    var o=orderBox();
+    root.innerHTML=o||h?'<div class="tt-dock">'+o+h+'</div>':'';
   }
-  root.addEventListener('click',function(ev){var b=ev.target.closest('button[data-tt]');if(!b)return;if(b.dataset.tt==='roll')rollPopup();else reply(b.dataset.tt)});
+  root.addEventListener('click',function(ev){
+    var b=ev.target.closest('button[data-tt]'), t=b&&b.dataset.tt;if(!b)return;
+    if(t==='roll')rollPopup();
+    else if(t==='hide'||t==='show'){setMin(t==='hide');var f=root.querySelector(t==='hide'?'[data-tt="show"]':'[data-tt="hide"]');if(f)f.focus()}
+    else reply(t);
+  });
 
   /* ---- pop-ups ---- */
   function buzz(){try{if(navigator.vibrate&&navigator.userActivation&&navigator.userActivation.hasBeenActive)navigator.vibrate([120,80,120])}catch(e){}}

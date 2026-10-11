@@ -1011,7 +1011,9 @@ span.chip{border:1px solid var(--rule);display:inline-block}
       next:nx&&nx.e!==c?sheetId(nx.e):'',nextName:nx&&nx.e!==c?shownName(nx.e):'',
       held:I.round?I.list.filter(function(e){return e.held}).map(sheetId).filter(Boolean):[],
       notes:c&&sheetId(c)&&I.notes&&I.notes[c.id]?I.notes[c.id]:[],
-      call:I.call&&!I.round?I.call.id:'', callFor:callFor(I)};
+      call:I.call&&!I.round?I.call.id:'', callFor:callFor(I),
+      // the turn order players see on their sheets during combat: who's in the fight, in order (enemies stay "Enemy")
+      order:I.round?I.list.filter(rolled).map(function(e){var o={n:shownName(e)};if(hero(e))o.id=e.id;if(e===c)o.cur=1;if(e.held)o.held=1;if(!hero(e)&&e.hpMax!=null&&e.hp<=0)o.down=1;return o}):[]};
     var key=JSON.stringify(doc);
     if(!cloudDb||key===lastRoundKey) return; lastRoundKey=key;
     doc.at=new Date().toISOString();
