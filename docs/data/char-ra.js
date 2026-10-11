@@ -67,7 +67,7 @@ window.DEFAULT_CHARACTER = {
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   attuned: ["", "", ""],
   story: {
-    gender: "", age: "", height: "", weight: "", eyes: "Ice blue", hair: "Platinum blonde, worn in many tight braids", skin: "Pale",
+    gender: "Female", age: "", height: "", weight: "", eyes: "Ice blue", hair: "Platinum blonde, worn in many tight braids", skin: "Pale",
     faith: "",
     backstory: "",
     personality: "",
