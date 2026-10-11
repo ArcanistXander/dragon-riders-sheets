@@ -62,6 +62,7 @@ window.SPELLS.wizard = [
   ["Magic Missile",1,"Evocation","1 action","120 ft","V, S","Instantaneous","","Three darts that always hit, 1d4 + 1 force each. +1 dart per slot level."],
   ["Protection from Evil and Good",1,"Abjuration","1 action","Touch","V, S, M","10 minutes","C","Aberrations, celestials, elementals, fey, fiends and undead have disadvantage to attack the target, and can't charm, frighten or possess it."],
   ["Ray of Sickness",1,"Necromancy","1 action","60 ft","V, S","Instantaneous","","Ranged spell attack: poison damage, and a CON save or the target is poisoned until your next turn.",{dmg:{dice:"2d8",up:"1d8",type:"poison",attack:true}}],
+  ["Shield",1,"Abjuration","1 reaction","Self","V, S","1 round","","Reaction when you're hit by an attack or targeted by Magic Missile: +5 AC until the start of your next turn, including against the triggering attack, and no damage from Magic Missile."],
   ["Silent Image",1,"Illusion","1 action","60 ft","V, S, M","10 minutes","C","A visual illusion up to a 15-ft. cube that you can move with an action. No sound or smell. An INT (Investigation) check sees through it."],
   ["Sleep",1,"Enchantment","1 action","90 ft","V, S, M","1 minute","","Roll 5d8: creatures within 20 ft. of a point, lowest HP first, fall asleep if their HP is within the total. +2d8 per slot level."],
   ["Snare",1,"Abjuration","1 minute","Touch","S, M","8 hours","","A hidden magical trap on a 5-ft. circle. A creature entering makes a DEX save or is hoisted upside down and restrained."],

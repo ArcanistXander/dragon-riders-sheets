@@ -103,7 +103,25 @@ window.DRAGON_KINDS = {
         corruptText: () => "The dragon's light turns violet-black: it extinguishes non-magical flames within 15 feet and fills the area with magical dim light instead of revealing the invisible." }
     ]
   },
-  copper:   { title: "Copper Dragon",   family: "Metallic",  damageType: "acid",     breath: { shape: "15-foot cone", effect: "On a failed save, the ground in the area becomes difficult terrain for 1 round." } },
+  /* Thamior (Ra). Numbers from the DM's party sheet. */
+  copper: {
+    title: "Copper Dragon", family: "Metallic",
+    abilities: { str: 15, dex: 10, con: 15, int: 14, wis: 9, cha: 13 },
+    saveBonus: { dex: true, con: true, wis: true, cha: true },
+    speed: "30 ft., fly 40 ft., climb 30 ft.",
+    immunities: "Acid",
+    senses: "Blindsight 10 ft., Darkvision 60 ft.",
+    damageType: "acid",
+    bite: { dice: "1d6", type: "piercing", reach: "5 ft." },
+    breath: {
+      name: "Acid Breath", recharge: "5–6", shape: "15-foot cone", save: "dex",
+      effect: "Each creature in the cone makes a Dexterity save, taking the damage on a failure and half as much on a success."
+    },
+    features: [
+      { level: 3, name: "Copper Cannonball", kind: "Action",
+        text: () => "The dragon leaps at a Medium or smaller creature within 15 feet: a contested Strength (Athletics) check against the target's Athletics or Acrobatics. On a success both fall prone and the target is grappled, taking 1d4 acid damage from the dragon's drool at the start of each of its turns while grappled." }
+    ]
+  },
   /* Ametrin (Breya). Numbers from the DM's party sheet and Breya's Quest Portal card. */
   amethyst: {
     title: "Amethyst Dragon", family: "Gem",
