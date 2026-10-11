@@ -989,7 +989,7 @@
   const knownCaster = (C) => !!(C && C.spellcasting && C.spellcasting.known);
   function spells(D) {
     const c = D.caster;
-    if (!c) return `<section class="panel"><p>This character doesn't cast spells.</p></section>`;
+    if (!c) return innateSpells(D);
     const prepCount = S.prepared.filter((n) => SPELL_INDEX[n] && SPELL_INDEX[n].level <= D.maxSpellLevel && !c.domain.includes(n)).length;
     const slots = D.slots.map((n, i) => `<div class="slotgrp"><span class="label">${ORD[i + 1]}</span><span class="pips">${Array.from({ length: n }, (_, j) => `<button class="pip slot ${S.slotsUsed[i + 1] > j ? "on" : ""}" data-act="slot" data-l="${i + 1}" data-j="${j}" aria-label="${ORD[i + 1]} level slot ${j + 1}${S.slotsUsed[i + 1] > j ? " (used)" : ""}"></button>`).join("")}</span></div>`).join("");
     const list = spellsAvailable(c).map((r) => SPELL_INDEX[r[0]]);
@@ -1025,6 +1025,27 @@
         <div class="splevel"><h3>Other spells <span class="small muted">from feats, items or the DM</span></h3>
           <button class="btn sm" data-act="addExtraSpell">Add a spell</button></div>
       </section></div>`;
+  }
+  /* A character with no spellcasting class: only spells from race, feats or items (an Aasimar's Light).
+     An extra spell can name its casting `ability`; edit mode shows the editable rows. */
+  function innateSpells(D) {
+    const rows = S.extraSpells.map((x, i) => ({ ...x, i })).map((x) => {
+      const sp = SPELL_INDEX[x.name];
+      if (UI.edit || !sp) return extraRow(x);
+      const open = UI.open[sp.name], ab = x.ability && ABIL_NAME[x.ability];
+      const dcAtk = ab ? ` · ${ABIL_NAME[x.ability]}: save DC ${8 + D.pb + D.mods[x.ability]}, attack ${sg(D.pb + D.mods[x.ability])}` : "";
+      return `<div class="sp"><div class="sp-head"><span style="text-align:center;color:var(--arc)">◇</span>
+        <div style="min-width:0"><span class="sp-name" data-act="openSpell" data-name="${esc(sp.name)}">${esc(sp.name)}</span><span class="badge">${sp.level ? ORD[sp.level] + " level" : "Cantrip"}</span>${sp.conc ? `<span class="badge">Conc.</span>` : ""}
+          <div class="sp-meta">${esc(sp.time)} · ${esc(sp.range)} · ${esc(sp.dur)}</div>
+          <div class="small muted">${esc(x.notes || "")}${esc(dcAtk)}</div></div></div>
+        ${open ? `<div class="sp-body"><div class="small muted">${ORD[sp.level]}${sp.level ? " level" : ""} ${esc(sp.school.toLowerCase())} · ${esc(sp.comp)}</div><p style="margin:4px 0 0">${esc(sp.text)}</p></div>` : ""}</div>`;
+    }).join("");
+    return `<div class="grid2" style="grid-template-columns:minmax(0,1fr)"><section class="panel">
+      <div class="ph"><h2>Spells</h2></div>
+      <p class="small muted" style="margin:0 0 10px">${esc(S.name.split(" ")[0])} has no spellcasting class. These come from race, feats or items and need no spell slots. Tap a name for the full text.</p>
+      <div class="splevel">${rows || `<p class="small muted">No spells.</p>`}</div>
+      <div class="splevel"><button class="btn sm" data-act="addExtraSpell">Add a spell</button></div>
+    </section></div>`;
   }
   function spellRow(sp, c, D) {
     const dom = c.domain.includes(sp.name);

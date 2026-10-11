@@ -1,6 +1,6 @@
 /* Cedrick — starting state (Monk 2 / Fighter 1, Protector Aasimar, Folk Hero). Classes, race and background from the DM (2026-10-11).
    Ability scores are the standard array plus Aasimar bonuses (placeholders for the DM);
-   the Protector subrace, the two monk skills and the fighting style are still to confirm.
+   the Protector subrace and the two monk skills are still to confirm. Fighting style Blind Fighting (Tasha's) per the DM.
    The live sheet saves its own copy; this is only the first-load default. */
 window.CHARACTER_ID = "cedrick";
 window.DEFAULT_ART = { portrait: "art/cedrick.webp", dragon: "art/cedrick-dragon.webp" };
@@ -32,8 +32,8 @@ window.DEFAULT_CHARACTER = {
   speed: 30,
   initMisc: 0,
   size: "Medium",
-  senses: "Darkvision 60 ft.",
-  defenses: "Resistance to necrotic and radiant damage.",
+  senses: "Blindsight 10 ft. (Blind Fighting), darkvision 60 ft.",
+  defenses: "Resistance to necrotic and radiant damage (Celestial Resistance).",
   profs: {
     armor: "Light armor, medium armor, shields (from Fighter; armor turns off Unarmored Defense and Martial Arts)",
     weapons: "Simple weapons, shortswords, martial weapons",
@@ -46,11 +46,11 @@ window.DEFAULT_CHARACTER = {
   ],
   cantrips: [],
   prepared: [],
-  extraSpells: [],
+  extraSpells: [{ name: "Light", level: 0, ability: "cha", notes: "Light Bearer (Aasimar). Cast at will; no spell slot." }],
   slotsUsed: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   resUsed: {},
   traits: [
-    { name: "Fighting Style", source: "Fighter", text: "Not chosen yet: Archery, Defense, Dueling, Great Weapon Fighting, Protection or Two-Weapon Fighting. Edit this entry once Cedrick picks one." },
+    { name: "Fighting Style: Blind Fighting", source: "Fighter", text: "You have blindsight with a range of 10 ft. Within that range you can see anything that isn't behind total cover, even if you're blinded or in darkness, and you can see an invisible creature unless it successfully hides from you. (Tasha's Cauldron of Everything.)" },
     { name: "Ability Score Increase", source: "Aasimar", text: "Your Charisma increased by 2, and your Wisdom by 1 (Protector)." },
     { name: "Darkvision", source: "Aasimar", text: "You see in dim light within 60 ft. as if it were bright light, and in darkness as if it were dim light (shades of gray only)." },
     { name: "Celestial Resistance", source: "Aasimar", text: "You have resistance to necrotic damage and radiant damage." },
