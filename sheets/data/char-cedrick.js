@@ -1,6 +1,6 @@
 /* Cedrick — starting state (Monk 2 / Fighter 1, Protector Aasimar, Folk Hero). Classes, race and background from the DM (2026-10-11).
    Ability scores are the standard array plus Aasimar bonuses (placeholders for the DM);
-   the Protector subrace and the two monk skills are still to confirm. Fighting style Blind Fighting (Tasha's) per the DM.
+   the Protector subrace is still to confirm. Skills set by the DM. Fighting style Blind Fighting (Tasha's) per the DM.
    The live sheet saves its own copy; this is only the first-load default. */
 window.CHARACTER_ID = "cedrick";
 window.DEFAULT_ART = { portrait: "art/cedrick.webp", dragon: "art/cedrick-dragon.webp" };
@@ -20,8 +20,8 @@ window.DEFAULT_CHARACTER = {
   classes: [{ id: "monk", sub: "", level: 2 }, { id: "fighter", sub: "", level: 1 }],
   abilities: { str: 12, dex: 15, con: 13, int: 10, wis: 15, cha: 10 },   // standard array, then Aasimar CHA +2 and Protector WIS +1
   saveProf: ["str", "dex"],
-  // Folk Hero: Animal Handling and Survival. The two monk skills (Acrobatics, Athletics, History, Insight, Religion or Stealth) aren't picked yet.
-  skills: { animal: 1, survival: 1 },
+  // Skills set by the DM: Animal Handling and Survival (Folk Hero), plus Acrobatics, Athletics, Perception and Stealth.
+  skills: { acrobatics: 1, animal: 1, athletics: 1, perception: 1, stealth: 1, survival: 1 },
   // Monk d8 at 1st level (max), then average rolls: monk 5, fighter 6. CON adds per level (22).
   // The DM set his max HP to 24, so misc carries the +2.
   hp: { rolls: [8, 5, 6], misc: 2, current: 24, temp: 0 },
