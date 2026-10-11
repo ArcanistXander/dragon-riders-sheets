@@ -72,6 +72,10 @@ window.DEFAULT_CHARACTER = {
   ],
   coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0 },
   attuned: ["Dragonrider Armor (Armor of Magical Strength)", "", ""],
+  magicItems: [
+    { name: "Dragonrider Armor (Armor of Magical Strength)", type: "Armor (artificer infusion)", rarity: "", attune: true, attuned: true, text: "Infused by Breya. The charges and effects are tracked on the Infusions & wards tab." },
+    { name: "Bag of Holding", type: "Wondrous item (Replicate Magic Item infusion)", rarity: "Uncommon", text: "Holds up to 500 lb, not exceeding 64 cubic ft, but always weighs 15 lb. Retrieving an item takes an action. Placing it inside another extradimensional space destroys both and opens a gate to the Astral Plane." }
+  ],
   story: {
     gender: "Female", age: "", height: "5 ft 9 in", weight: "", eyes: "Bright blue", hair: "Brown, fading to light blonde", skin: "Fair",
     faith: "Bahamut, the Platinum Dragon",

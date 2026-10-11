@@ -83,6 +83,11 @@
     s.diceMode = s.diceMode === "digital" ? "digital" : "physical";
     if (!Array.isArray(s.conds)) { s.conds = []; if (s.conditions && s.conditionsNote == null) s.conditionsNote = s.conditions; }
     s.conditionsNote = s.conditionsNote || "";
+    if (!Array.isArray(s.magicItems)) { // first load after the Magic items tab arrived: start from the defaults plus the old attunement slots
+      s.magicItems = clone(d.magicItems || []);
+      (s.attuned || []).filter((n) => n && !s.magicItems.some((m) => m.name === n)).forEach((n) => s.magicItems.push({ name: n, attune: true, attuned: true }));
+    }
+    s.magicItems.forEach((m) => { m.type = m.type || ""; m.rarity = m.rarity || ""; m.text = m.text || ""; m.attune = !!m.attune; m.attuned = !!(m.attune && m.attuned); m.used = +m.used || 0; });
     s.attacks.forEach((w) => {
       if (!w.kind) w.kind = w.ability === "dex" ? "ranged" : "melee";
       if (w.name === "Dagger" && w.range == null) { w.range = "20/60"; w.props = "Finesse, light, thrown"; if (/thrown/i.test(w.notes || "")) w.notes = ""; }
@@ -141,7 +146,12 @@
     D.maxSpellLevel = D.slots.length;
     const a = s.armor;
     const dexPart = a.dexCap == null || a.dexCap === "" ? mods.dex : Math.min(mods.dex, +a.dexCap);
-    D.ac = (+a.base || 10) + dexPart + (a.shield ? 2 : 0) + (+a.misc || 0);
+    // magic items count while attuned, or just carried when they need no attunement
+    D.magic = { ac: 0, saves: 0, why: [] };
+    (s.magicItems || []).filter((m) => m.fx && (!m.attune || m.attuned)).forEach((m) => {
+      D.magic.ac += +m.fx.ac || 0; D.magic.saves += +m.fx.saves || 0; D.magic.why.push(m.name);
+    });
+    D.ac = (+a.base || 10) + dexPart + (a.shield ? 2 : 0) + (+a.misc || 0) + D.magic.ac;
     const fx = { init: 0, speed: 0, hpPerLevel: 0, passive: 0, saves: [], resources: [] };
     (s.feats || []).forEach((f) => {
       const F = (window.FEATS || []).find((x) => x.key === f.key); if (!F || !F.fx) return;
@@ -157,7 +167,7 @@
     D.baseHpMax = s.hp.rolls.reduce((x, y) => x + (+y || 0), 0) + total * (mods.con + fx.hpPerLevel) + (+s.hp.misc || 0);
     D.hpMax = D.eff.hpHalf.length ? Math.floor(D.baseHpMax / 2) : D.baseHpMax;
     D.hitDice = s.classes.map((c) => c.level + "d" + CLASSES[c.id].hitDie).join(" + ");
-    D.save = (k) => mods[k] + (s.saveProf.includes(k) || fx.saves.includes(k) ? pb : 0);
+    D.save = (k) => mods[k] + (s.saveProf.includes(k) || fx.saves.includes(k) ? pb : 0) + D.magic.saves;
     D.skill = (k, ab) => mods[ab] + Math.floor((s.skills[k] || 0) * pb);
     D.passive = (k, ab) => 10 + D.skill(k, ab) + (k === "perception" || k === "investigation" ? fx.passive : 0);
     D.resources = [].concat(...D.classes.map((c) => c.resources), fx.resources).filter((r) => r.max > 0);
@@ -593,14 +603,14 @@
     if (!D.caster && !(S.extraSpells || []).length) T.splice(2, 1); // non-casters skip the Spells tab
     const pn = panelsFor(D);
     if (pn.length) T.push(["panels", window.DEFAULT_CHARACTER.panelsTab || pn.map((x) => x.P.title).join(" & ")]);
-    T.push(["dragon", "Dragon bond"], ["inventory", "Inventory"], ["story", "Story & art"]);
+    T.push(["dragon", "Dragon bond"], ["inventory", "Inventory"], ["magic", "Magic items"], ["story", "Story & art"]);
     const cur = T.some(([k]) => k === UI.tab) ? UI.tab : "overview";
     return `<nav class="tabs" role="tablist">${T.map(([k, n]) => `<button role="tab" class="tab ${k === "dragon" ? "dragon-tab" : ""}" aria-selected="${cur === k}" data-act="tab" data-tab="${k}">${esc(n)}</button>`).join("")}</nav>`;
   }
   function page(D) {
     if (UI.tab === "panels" && !panelsFor(D).length) return overview(D);
     if (UI.tab === "spells" && !D.caster && !(S.extraSpells || []).length) return overview(D);
-    return ({ overview, attacks, spells, features, panels, dragon, inventory, story }[UI.tab] || overview)(D);
+    return ({ overview, attacks, spells, features, panels, dragon, inventory, magic, story }[UI.tab] || overview)(D);
   }
 
   /* ---- Option panels (artificer infusions, Dragonwarden wards…) ----
@@ -707,7 +717,7 @@
       <div class="stack">
         <section class="panel"><h2>Armor & defenses</h2>
           <dl class="kv">
-            <dt>Armor</dt><dd>${esc(S.armor.name)}${S.armor.shield ? " + shield" : ""} · AC ${D.ac}${S.armor.note ? ` <span class="muted small">(${esc(S.armor.note)})</span>` : ""}</dd>
+            <dt>Armor</dt><dd>${esc(S.armor.name)}${S.armor.shield ? " + shield" : ""} · AC ${D.ac}${D.magic.ac ? ` <span class="small muted">(includes ${esc(D.magic.why.join(", "))})</span>` : ""}${S.armor.note ? ` <span class="muted small">(${esc(S.armor.note)})</span>` : ""}</dd>
             <dt>Defenses</dt><dd>${UI.edit ? inp("defenses", { label: "Defenses" }) : esc(S.defenses)}</dd>
             <dt>Senses</dt><dd>${UI.edit ? inp("senses", { label: "Senses", ph: "e.g. Darkvision 60 ft." }) : esc(S.senses || "—")}</dd>
             <dt>Other effects</dt><dd>${inp("conditionsNote", { label: "Other effects", ph: "Spells or effects on you, e.g. Bless" })}</dd>
@@ -1115,16 +1125,98 @@
       <td><button class="icon-btn" data-act="delItem" data-i="${i}" aria-label="Remove ${esc(it.name)}">✕</button></td></tr>`).join("");
     const coins = ["cp", "sp", "ep", "gp", "pp"].map((c) => `<label class="stat"><span class="label">${c}</span>${inp("coins." + c, { num: 1, label: c, style: "width:100%" })}</label>`).join("");
     const over = D.weight > D.carry;
+    const att = S.magicItems.filter((m) => m.attuned).length;
     return `<div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
-      <section class="panel"><div class="ph"><h2>Equipment</h2><button class="btn sm" data-act="addItem">Add item</button></div>
-        <div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      </section>
+      <div class="stack">
+        ${potionPanel(D)}
+        <section class="panel"><div class="ph"><h2>Equipment</h2><button class="btn sm" data-act="addItem">Add item</button></div>
+          <div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+        </section>
+      </div>
       <div class="stack">
         <section class="panel"><h2>Coins</h2><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px">${coins}</div></section>
         <section class="panel"><h2>Carrying</h2>
           <dl class="kv"><dt>Carried</dt><dd class="num" style="color:${over ? "var(--bad)" : "inherit"}">${Math.round(D.weight * 10) / 10} lb</dd>
           <dt>Capacity</dt><dd class="num">${D.carry} lb</dd><dt>Push / drag / lift</dt><dd class="num">${D.carry * 2} lb</dd></dl></section>
-        <section class="panel"><h2>Attuned items</h2>${[0, 1, 2].map((i) => `<div style="margin-bottom:6px">${inp("attuned." + i, { label: "Attuned item " + (i + 1), ph: "Empty slot" })}</div>`).join("")}</section>
+        <section class="panel"><h2>Magic items</h2><p class="small" style="margin:0">${S.magicItems.length} item${S.magicItems.length === 1 ? "" : "s"} · attuned to ${att} of 3.</p>
+          <button class="btn sm" style="margin-top:8px" data-act="tab" data-tab="magic">Open Magic items</button></section>
+      </div></div>`;
+  }
+
+  /* ---- Healing potions ----
+     Potions are ordinary inventory rows; any row named like a healing potion shows up here. */
+  function potionKind(name) {
+    const n = String(name || "");
+    if (!/heal/i.test(n) || !/potion/i.test(n)) return null;
+    const P = window.HEALING_POTIONS || [];
+    return P.slice(1).find((p) => p.match.test(n)) || P[0] || null;
+  }
+  function potionPanel(D) {
+    const own = S.inventory.map((it, i) => ({ it, i, P: potionKind(it.name) })).filter((x) => x.P);
+    const dn = S.dragon.name || "your dragon";
+    const rows = own.map(({ it, i, P }) => {
+      const m = P.dice.match(/^(\d+)d(\d+)\+(\d+)$/); const lo = +m[1] + +m[3], hi = +m[1] * +m[2] + +m[3];
+      const qty = +it.qty || 0;
+      return `<tr>
+        <td><b>${esc(it.name)}</b><div class="small muted">${esc(P.rarity)}</div></td>
+        <td class="num"><b>${esc(P.dice.replace("+", " + "))}</b><div class="small muted">${lo}–${hi}, about ${Math.round((lo + hi) / 2)}</div></td>
+        <td class="num">${qty}</td>
+        <td><div class="choice">
+          <select id="pot-who-${i}" class="f" style="width:auto" aria-label="Who drinks it"><option value="me">${esc(S.name.split(" ")[0])}</option><option value="dragon">${esc(dn)}</option></select>
+          <input id="pot-amt-${i}" class="f n" type="number" min="1" max="${hi}" inputmode="numeric" placeholder="${lo}–${hi}" aria-label="Healing you rolled for ${esc(it.name)}">
+          <button class="btn sm primary" data-act="drink" data-i="${i}" ${qty > 0 ? "" : "disabled"}>Heal</button>
+          ${physical() ? "" : `<button class="btn sm" data-act="drinkRoll" data-i="${i}" ${qty > 0 ? "" : "disabled"}>Roll & heal</button>`}
+        </div></td></tr>`;
+    }).join("");
+    const add = (window.HEALING_POTIONS || []).map((p) => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.dice.replace("+", " + "))})</option>`).join("");
+    return `<section class="panel"><div class="ph"><h2>Healing potions</h2>
+        <span class="choice"><select id="pot-add" class="f" style="width:auto" aria-label="Potion to add">${add}</select><button class="btn sm" data-act="addPotion">Add potion</button></span></div>
+      ${rows ? `<div class="tw"><table class="t"><thead><tr><th>Potion</th><th>Heals</th><th>Have</th><th>Who drinks · your roll</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="small muted" style="margin:8px 0 0">${physical() ? "Roll the dice shown, type the total and press Heal." : "Type a total and press Heal, or let the sheet roll."} The HP goes on whoever drinks it and one potion comes off your pack. Drinking takes an action; so does giving one to someone else.</p>`
+        : `<p class="small muted" style="margin:0">No healing potions in your pack. Add one above when you find or buy one.</p>`}
+    </section>`;
+  }
+
+  /* ---- Magic items ---- */
+  function magic(D) {
+    const att = S.magicItems.filter((m) => m.attuned).length;
+    const cards = S.magicItems.map((m, i) => {
+      const live = m.fx && (!m.attune || m.attuned);
+      const fxTxt = m.fx ? [m.fx.ac ? `+${m.fx.ac} AC` : "", m.fx.saves ? `+${m.fx.saves} to saves` : ""].filter(Boolean).join(", ") : "";
+      const pips = m.charges && +m.charges.max ? `<div class="choice" style="margin-top:6px"><span class="label">Charges</span><span class="pips">${Array.from({ length: +m.charges.max }, (_, j) => `<button class="pip slot ${m.used > j ? "on" : ""}" data-act="miCharge" data-i="${i}" data-j="${j}" aria-label="${esc(m.name)} charge ${j + 1}${m.used > j ? " (spent)" : ""}"></button>`).join("")}</span>
+          <span class="small muted">${Math.max(0, m.charges.max - m.used)} left${m.charges.recharge ? " · " + esc(m.charges.recharge) : ""}</span></div>` : "";
+      const edit = UI.miEdit === i ? `<div class="inline-grid" style="margin-top:8px">
+          <label class="small">Name${inp(`magicItems.${i}.name`, { label: "Name" })}</label>
+          <label class="small">Type${inp(`magicItems.${i}.type`, { label: "Type", ph: "Wondrous item, ring, weapon…" })}</label>
+          <label class="small">Rarity${inp(`magicItems.${i}.rarity`, { label: "Rarity", ph: "Uncommon" })}</label>
+          <label class="small">Charges (max)<input id="f-mi-${i}-ch" class="f n" type="number" min="0" data-act-input="miMax" data-i="${i}" value="${m.charges ? +m.charges.max || "" : ""}" aria-label="Maximum charges"></label>
+          <label class="small" style="align-self:end"><input type="checkbox" class="chk" data-bindchk="magicItems.${i}.attune" ${m.attune ? "checked" : ""}> Requires attunement</label>
+        </div>
+        <label class="small" style="display:block;margin-top:6px">What it does${inp(`magicItems.${i}.text`, { area: 1, rows: 3, label: "What it does" })}</label>
+        ${m.charges ? `<label class="small" style="display:block;margin-top:6px">How it recharges${inp(`magicItems.${i}.charges.recharge`, { label: "How it recharges", ph: "e.g. Regains 1d6 + 1 charges at dawn" })}</label>` : ""}
+        <div class="choice" style="margin-top:8px"><button class="btn sm" data-act="miEdit" data-i="${i}">Done</button><button class="btn sm danger" data-act="miDel" data-i="${i}">Remove item</button></div>` : "";
+      return `<div class="feat">
+        <h4>${esc(m.name || "Unnamed item")}${m.rarity ? `<span class="badge">${esc(m.rarity)}</span>` : ""}${m.attuned ? `<span class="badge dom">Attuned</span>` : ""}
+          <span style="margin-left:auto;display:inline-flex;gap:6px">${m.attune ? `<button class="btn sm" data-act="miAttune" data-i="${i}" aria-pressed="${m.attuned}">${m.attuned ? "Attuned" : "Attune"}</button>` : ""}
+          <button class="icon-btn edit" data-act="miEdit" data-i="${i}" aria-label="Edit ${esc(m.name)}" aria-expanded="${UI.miEdit === i}">✎</button></span></h4>
+        <p class="small muted">${esc([m.type, m.attune ? "requires attunement" : ""].filter(Boolean).join(" · "))}</p>
+        ${m.text ? `<p>${esc(m.text)}</p>` : ""}
+        ${fxTxt ? `<p class="small" style="color:${live ? "var(--good)" : "var(--muted)"}">${esc(fxTxt)}${live ? ", already counted on your sheet" : ", once you attune to it"}.</p>` : ""}
+        ${pips}${edit}</div>`;
+    }).join("");
+    const opts = (window.MAGIC_ITEMS || []).map((m) => `<option value="${esc(m.name)}">${esc(m.name)} · ${esc(m.rarity)}${m.attune ? " · attunement" : ""}</option>`).join("");
+    return `<div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+      <section class="panel"><div class="ph"><h2>Magic items</h2><button class="btn sm" data-act="miCustom">Custom item</button></div>
+        ${cards || `<p class="small muted" style="margin:0">No magic items yet. Add one from the list, or make a custom item for something the DM invented.</p>`}</section>
+      <div class="stack">
+        <section class="panel"><h2>Attunement</h2>
+          <div class="pips" aria-label="Attunement slots">${[0, 1, 2].map((j) => `<span class="pip slot ${j < att ? "" : "on"}" style="cursor:default"></span>`).join("")}</div>
+          <p class="small" style="margin:8px 0 0">${att} of 3 slots used${att ? ": " + esc(S.magicItems.filter((m) => m.attuned).map((m) => m.name).join(", ")) : ""}.</p>
+          <p class="small muted" style="margin:6px 0 0">Attuning takes a short rest spent focused on the item. You can be attuned to 3 items at once. An item that needs attunement does nothing magical until you attune.</p></section>
+        <section class="panel"><h2>Add an item</h2>
+          <select id="add-magic" class="f" aria-label="Magic item to add"><option value="">Choose from the Dungeon Master's Guide…</option>${opts}</select>
+          <div class="choice" style="margin-top:8px"><button class="btn sm primary" data-act="miAdd">Add item</button></div>
+          <p class="small muted" style="margin:8px 0 0">Healing potions live on the Inventory tab, where you can drink them.</p></section>
       </div></div>`;
   }
 
@@ -1738,6 +1830,47 @@
     },
     addItem: () => { S.inventory.push({ name: "", qty: 1, wt: 0, notes: "" }); commit(); const i = S.inventory.length - 1; const el = document.getElementById(`f-inv-${i}-name`); if (el) el.focus(); },
     delItem: (e) => { S.inventory.splice(+e.dataset.i, 1); commit(); },
+    /* Healing potions: heal whoever drinks by the typed (or rolled) total and take one off the stack. */
+    drink: (e, ev, rolled) => {
+      const i = +e.dataset.i; const it = S.inventory[i]; const P = it && potionKind(it.name); if (!P || !(+it.qty > 0)) return;
+      const box = $(`#pot-amt-${i}`); const n = rolled ? rolled.total : Math.round(+(box && box.value) || 0);
+      if (!(n > 0)) { toast(`Roll ${P.dice.replace("+", " + ")} first`, "Type the total in the box, then press Heal."); if (box) box.focus(); return; }
+      const who = ($(`#pot-who-${i}`) || {}).value === "dragon" ? "dragon" : "me";
+      const D = derive(); let got, to;
+      if (who === "dragon") {
+        const g = D.dragon; const cur = S.dragon.hpCurrent == null ? g.hpMax : S.dragon.hpCurrent; const now = Math.min(g.hpMax, cur + n);
+        got = now - cur; S.dragon.hpCurrent = now >= g.hpMax ? null : now; to = `${S.dragon.name || "Your dragon"}: ${now} / ${g.hpMax} HP`;
+      } else {
+        const cur = S.hp.current; S.hp.current = Math.min(D.hpMax, cur + n); if (S.hp.current > 0) S.death = { s: 0, f: 0 };
+        got = S.hp.current - cur; to = `${S.hp.current} / ${D.hpMax} HP`;
+      }
+      it.qty = +it.qty - 1;
+      const left = it.qty;
+      if (left <= 0) S.inventory.splice(i, 1);
+      commit();
+      toast(`${esc(it.name)}: healed <b class="num">${got}</b>`, `${rolled ? esc(P.dice) + " " + rolled.detail + " · " : ""}${got < n ? `Rolled ${n}, capped at max HP · ` : ""}${esc(to)} · ${left > 0 ? left + " left" : "that was the last one"}`, 6000);
+    },
+    drinkRoll: (e) => { const it = S.inventory[+e.dataset.i]; const P = it && potionKind(it.name); if (P) A.drink(e, null, roll(P.dice)); },
+    addPotion: () => {
+      const name = ($("#pot-add") || {}).value; const P = (window.HEALING_POTIONS || []).find((p) => p.name === name); if (!P) return;
+      const it = S.inventory.find((x) => potionKind(x.name) === P);
+      if (it) it.qty = (+it.qty || 0) + 1; else S.inventory.push({ name: P.name, qty: 1, wt: 0.5, notes: P.dice.replace("+", " + ") + " HP" });
+      commit(); toast(`${esc(P.name)} added`, `You now have ${(it || S.inventory[S.inventory.length - 1]).qty}.`);
+    },
+    miAdd: () => {
+      const name = ($("#add-magic") || {}).value; const M = (window.MAGIC_ITEMS || []).find((m) => m.name === name);
+      if (!M) { toast("Choose an item first", "Or use Custom item for something the DM made up."); return; }
+      S.magicItems.push(Object.assign(clone(M), { attune: !!M.attune, attuned: false, used: 0 })); commit();
+    },
+    miCustom: () => { S.magicItems.push({ name: "", type: "", rarity: "", text: "", attune: false, attuned: false, used: 0 }); UI.miEdit = S.magicItems.length - 1; commit(); const el = document.getElementById(`f-magicItems-${UI.miEdit}-name`); if (el) el.focus(); },
+    miEdit: (e) => { const i = +e.dataset.i; UI.miEdit = UI.miEdit === i ? null : i; render(); },
+    miDel: (e) => { S.magicItems.splice(+e.dataset.i, 1); UI.miEdit = null; commit(); },
+    miAttune: (e) => {
+      const m = S.magicItems[+e.dataset.i];
+      if (!m.attuned && S.magicItems.filter((x) => x.attuned).length >= 3) { toast("All 3 attunement slots in use", "End attunement to another item first."); return; }
+      m.attuned = !m.attuned; commit();
+    },
+    miCharge: (e) => { const m = S.magicItems[+e.dataset.i]; const j = +e.dataset.j; m.used = m.used > j ? j : j + 1; commit(); },
     addCustom: () => { S.customFeatures.push({ name: "", text: "" }); commit(); },
     delCustom: (e) => { S.customFeatures.splice(+e.dataset.i, 1); commit(); },
     delFeat: (e) => { S.feats.splice(+e.dataset.i, 1); commit(); },
@@ -1841,6 +1974,7 @@
     if (ev.key === "Escape" && MODAL) { MODAL = null; renderModal(); }
     if (ev.key === "Enter" && (ev.target.id === "hp-amt" || ev.target.id === "dhp-amt")) { ev.preventDefault(); }
     if (ev.key === "Enter" && ev.target.id === "rch-roll") { ev.preventDefault(); A.rechargeCheck(); }
+    if (ev.key === "Enter" && /^pot-amt-\d+$/.test(ev.target.id)) { ev.preventDefault(); A.drink({ dataset: { i: ev.target.id.slice(8) } }); }
     if (ev.key === "Enter" && ev.target.id === "hd-roll") { ev.preventDefault(); const b = $('[data-act="spendHD"][data-k="manual"]'); if (b && !b.disabled) A.spendHD(b); }
   });
   function luField(el) {
@@ -1866,8 +2000,15 @@
   document.addEventListener("change", (ev) => {
     const el = ev.target;
     if (el.dataset.bind) { setPath(S, el.dataset.bind, readVal(el)); commit(); }
-    else if (el.dataset.bindchk) { setPath(S, el.dataset.bindchk, el.checked); commit(); }
-    else if (el.dataset.lu) {
+    else if (el.dataset.bindchk) {
+      setPath(S, el.dataset.bindchk, el.checked);
+      const mi = el.dataset.bindchk.match(/^magicItems\.(\d+)\.attune$/); if (mi && !el.checked) S.magicItems[+mi[1]].attuned = false;
+      commit();
+    } else if (el.dataset.actInput === "miMax") {
+      const m = S.magicItems[+el.dataset.i]; const n = Math.max(0, Math.round(+el.value || 0));
+      if (n) { m.charges = Object.assign({ recharge: "" }, m.charges, { max: n }); m.used = Math.min(m.used, n); } else { delete m.charges; m.used = 0; }
+      commit();
+    } else if (el.dataset.lu) {
       luField(el);
       renderModal();
     } else if (el.dataset.actInput === "dragonAbil") {
