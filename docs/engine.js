@@ -385,7 +385,7 @@
         level: D.total, classes: classLine(D), race: S.race, ac: D.ac, init: D.init, speed: D.speed, pp: D.passive("perception", "wis"),
         dc: c ? c.dc : null, saves, saveProf: S.saveProf.concat(D.fx.saves),
         hp: { cur: Math.min(S.hp.current, D.hpMax), max: D.hpMax, temp: S.hp.temp || 0 }, death: S.death,
-        conds, exh: +S.exhaustion || 0, insp: !!S.inspiration, lvlReady: S.levelGrant || 0, hero: S.heroPoints, conc: S.concentration || "", defenses: S.defenses || ""
+        conds, exh: +S.exhaustion || 0, insp: !!S.inspiration, lvlReady: S.levelGrant || 0, slots: (S.slotsUsed || []).reduce((a, x) => a + (+x || 0), 0), hero: S.heroPoints, conc: S.concentration || "", defenses: S.defenses || ""
       },
       dragon: {
         // base AC: the party sheet adds Dragonwarden wards itself
@@ -414,27 +414,37 @@
   // The DM unlocked a level: streamers, confetti and horns.
   function levelParty() {
     const old = document.getElementById("lvl-party"); if (old) old.remove();
+    partyCss();
+    const wrap = document.createElement("div"); wrap.id = "lvl-party"; wrap.className = "lp-veil";
+    partyPop(wrap);
+  }
+  // Styles for the DM's pop-ups (level up, loot) and the glowing Level up button.
+  function partyCss() {
     if (!document.getElementById("lvl-party-css")) {
       const st = document.createElement("style"); st.id = "lvl-party-css";
       st.textContent = `
-#lvl-party{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:color-mix(in srgb,#000 55%,transparent);padding:16px}
-#lvl-party canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#lvl-party .lp-card{position:relative;max-width:440px;width:100%;text-align:center;background:var(--panel);color:var(--ink);border:3px solid var(--bronze);border-radius:16px;padding:22px 20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.45);animation:lp-pop .55s cubic-bezier(.2,1.6,.4,1)}
-#lvl-party .lp-horns{font-size:2.6rem;line-height:1;display:flex;justify-content:center;gap:18px}
-#lvl-party .lp-horns span{display:inline-block;animation:lp-toot .5s ease-in-out 3 alternate}
-#lvl-party .lp-horns span:last-child{transform:scaleX(-1);animation-name:lp-toot2}
-#lvl-party h2{font-size:1.6rem;margin:10px 0 6px;color:var(--bronze);line-height:1.2}
-#lvl-party p{margin:0 0 14px;color:var(--muted)}
-#lvl-party .lp-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.lp-veil{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:color-mix(in srgb,#000 55%,transparent);padding:16px}
+.lp-veil canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.lp-veil .lp-card{position:relative;max-width:440px;width:100%;text-align:center;background:var(--panel);color:var(--ink);border:3px solid var(--bronze);border-radius:16px;padding:22px 20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.45);animation:lp-pop .55s cubic-bezier(.2,1.6,.4,1)}
+.lp-veil .lp-horns{font-size:2.6rem;line-height:1;display:flex;justify-content:center;gap:18px}
+.lp-veil .lp-horns span{display:inline-block;animation:lp-toot .5s ease-in-out 3 alternate}
+.lp-veil .lp-horns span:last-child{transform:scaleX(-1);animation-name:lp-toot2}
+.lp-veil h2{font-size:1.6rem;margin:10px 0 6px;color:var(--bronze);line-height:1.2}
+.lp-veil p{margin:0 0 14px;color:var(--muted)}
+.lp-veil .lp-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.lp-veil .lt-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:4px;font-size:1.1rem;font-weight:700}
+.lp-veil .lp-card .small{font-size:.85rem}
 .lvl-ready{animation:lp-glow 1.6s ease-in-out infinite}
 @keyframes lp-pop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
 @keyframes lp-toot{from{transform:rotate(-12deg) scale(1)}to{transform:rotate(8deg) scale(1.25)}}
 @keyframes lp-toot2{from{transform:scaleX(-1) rotate(-12deg) scale(1)}to{transform:scaleX(-1) rotate(8deg) scale(1.25)}}
 @keyframes lp-glow{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--bronze) 35%,transparent)}}
-@media (prefers-reduced-motion:reduce){#lvl-party .lp-card,#lvl-party .lp-horns span,.lvl-ready{animation:none}}`;
+@media (prefers-reduced-motion:reduce){.lp-veil .lp-card,.lp-veil .lp-horns span,.lvl-ready{animation:none}}`;
       document.head.appendChild(st);
     }
-    const wrap = document.createElement("div"); wrap.id = "lvl-party";
+  }
+  partyCss();
+  function partyPop(wrap) {
     wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-modal", "true"); wrap.setAttribute("aria-labelledby", "lp-title");
     wrap.innerHTML = `<canvas aria-hidden="true"></canvas><div class="lp-card">
       <div class="lp-horns" aria-hidden="true"><span>📯</span><span>🎉</span><span>📯</span></div>
@@ -521,6 +531,59 @@
     S = migrate(Object.assign(h.snapshot, { history: hist, dm, levelGrant: 0 }));
     return `Back to level ${h.from}.`;
   }
+  /* Loot from the DM (party/conds '<rider>'.loot): coins into the purse, items into Equipment (same name adds to the
+     quantity; a healing potion lands where the Healing potions table finds it). Returns what arrived, as text. */
+  function applyLoot(p) {
+    const got = [];
+    S.coins = S.coins || {};
+    ["pp", "gp", "ep", "sp", "cp"].forEach((c) => { const n = Math.floor(+((p.coins || {})[c]) || 0); if (n > 0) { S.coins[c] = (+S.coins[c] || 0) + n; got.push(`${n} ${c}`); } });
+    (p.items || []).forEach((it) => {
+      const name = String(it.name || "").trim(), q = Math.max(1, Math.floor(+it.qty || 1)); if (!name) return;
+      const row = S.inventory.find((r) => String(r.name).trim().toLowerCase() === name.toLowerCase());
+      if (row) row.qty = (+row.qty || 0) + q; else S.inventory.push({ name, qty: q, wt: 0, notes: "From the DM" });
+      got.push(name + (q > 1 ? ` ×${q}` : ""));
+    });
+    return got;
+  }
+  function lootPop(parcels) {
+    const all = [].concat(...parcels); if (!all.length) return;
+    const old = document.getElementById("loot-party"); if (old) old.remove();
+    partyCss();
+    const wrap = document.createElement("div"); wrap.id = "loot-party"; wrap.className = "lp-veil";
+    wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-modal", "true"); wrap.setAttribute("aria-labelledby", "lt-title");
+    wrap.innerHTML = `<div class="lp-card"><div class="lp-horns" aria-hidden="true"><span>💰</span><span>🎁</span><span>💰</span></div>
+      <h2 id="lt-title">Loot!</h2><p>The DM sent ${esc(S.name || "you")}:</p>
+      <ul class="lt-list">${all.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <p class="small">Coins are in your purse and items in Equipment, on the Inventory tab.</p>
+      <div class="lp-btns"><button class="btn" data-lt="inv">Open Inventory</button><button class="btn primary" data-lt="ok">Got it</button></div></div>`;
+    document.body.appendChild(wrap);
+    const back = document.activeElement;
+    const close = () => { wrap.remove(); document.removeEventListener("keydown", key, true); if (back && back.focus) try { back.focus(); } catch (e) { /* gone */ } };
+    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    document.addEventListener("keydown", key, true);
+    wrap.addEventListener("click", (e) => { const b = e.target.closest("[data-lt]"); if (!b) return; close(); if (b.dataset.lt === "inv") { UI.tab = "inventory"; render(); } });
+    wrap.querySelector('[data-lt="ok"]').focus();
+    chime(wrap);
+  }
+  // a little coin "cha-ching"
+  function chime(wrap) {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    let ac; try { ac = new AC(); } catch (e) { return; }
+    let played = false;
+    const play = () => {
+      if (played || ac.state !== "running") return; played = true;
+      const t = ac.currentTime + .03;
+      [[1318, 0], [1760, .09], [2637, .18]].forEach(([f, a]) => {
+        const o = ac.createOscillator(), g = ac.createGain(); o.type = "triangle"; o.frequency.value = f;
+        g.gain.setValueAtTime(0, t + a); g.gain.linearRampToValueAtTime(.18, t + a + .01); g.gain.exponentialRampToValueAtTime(.001, t + a + .5);
+        o.connect(g); g.connect(ac.destination); o.start(t + a); o.stop(t + a + .55);
+      });
+      setTimeout(() => { try { ac.close(); } catch (e) { /* closed */ } }, 1500);
+    };
+    ac.resume().then(play, () => {});
+    wrap.addEventListener("pointerdown", () => ac.resume().then(play, () => {}), { once: true, capture: true });
+  }
+  window.DR_LOOT = (p) => { const got = applyLoot(p); commit(); lootPop([got]); }; // console preview: DR_LOOT({coins:{gp:5},items:[{name:"Rope",qty:1}]})
   window.DR_LEVEL_PARTY = levelParty; // for a preview of the pop-up from the browser console
   // The DM called a short rest for the party: open the Short rest window (spending hit dice stays the player's choice).
   function dmShortRest() {
@@ -643,10 +706,15 @@
       if (msg.length) { commit(); toast("From the DM", msg.map(esc).join("<br>"), 7000); }
     }, () => {});
     db.doc("party/conds").onSnapshot((s) => {
-      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = []; let celebrate = false, taken = "";
+      const mine2 = ((s.exists && s.data()) || {})[me] || {}, seen = dmSeen(), msg = [], loot = []; let celebrate = false, taken = "";
       const first = !seen.condLinked; seen.condLinked = true; let changed = first;
       Object.keys(mine2).forEach((k) => {
         const v = mine2[k] || {}, at = String(v.at || "");
+        if (k === "loot") { // parcels newer than the last one taken in (S.dm.loot); a fresh link starts from now
+          const list = (Array.isArray(v.list) ? v.list : []).filter((p) => p && p.at).sort((x, y) => (x.at < y.at ? -1 : 1));
+          list.forEach((p) => { if (p.at > (seen.loot || "")) { if (!first) loot.push(applyLoot(p)); seen.loot = p.at; changed = true; } });
+          return;
+        }
         if (!at || at <= (seen.cond[k] || "")) return; seen.cond[k] = at; changed = true;
         if (first) return; // first link: skip what was sent before
         if (k === "exh") { const x = Math.max(0, Math.min(6, +v.v || 0)); if (x !== +S.exhaustion) { S.exhaustion = x; msg.push(`exhaustion ${x}`); } return; }
@@ -661,7 +729,8 @@
         const c = CONDITIONS.find((x) => x[0] === k); if (!c) return;
         if (S.conds.includes(k) !== !!v.on) { S.conds = v.on ? S.conds.concat(k) : S.conds.filter((x) => x !== k); msg.push((v.on ? "" : "removed ") + c[1].toLowerCase()); }
       });
-      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (celebrate || taken) commit(); else if (changed) persist();
+      if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (celebrate || taken || loot.length) commit(); else if (changed) persist();
+      if (loot.length) lootPop(loot);
       if (celebrate) levelParty();
       if (taken) toast("The DM took back the level-up", esc(taken), 7000);
     }, () => {});

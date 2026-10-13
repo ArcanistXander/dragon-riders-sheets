@@ -29,7 +29,69 @@
     db.doc('party/turn-'+ID).set({cid:round.cid,round:round.round,entry:ME,act:act,at:new Date().toISOString()})
       .catch(function(){sent='';msg='Couldn’t reach the DM’s tracker. Tell the DM.';draw()});
   }
+  /* A saving throw the DM called: this rider (and/or their dragon) types the total rolled at the table. The DC stays with the DM. */
+  var save=null, saveBox=null, saveSent='';
+  var ABN={str:'Strength',dex:'Dexterity',con:'Constitution',int:'Intelligence',wis:'Wisdom',cha:'Charisma'};
+  function seenKey(kind,k){try{if(localStorage.getItem(KEY+'-'+kind)===k)return true;localStorage.setItem(KEY+'-'+kind,k)}catch(e){}return false}
+  function onSave(d){
+    var s=d&&d.save, mine=s?(s.who||[]).filter(function(w){return w.id===ID||w.id===ID+'-dragon'}):[];
+    save=mine.length?{id:s.id,ab:s.ab,label:s.label||'',who:mine}:null;
+    if(!save||save.id!==saveSent)saveSent='';
+    if(!save&&saveBox){saveBox.close();saveBox=null}
+    if(save&&!saveBox&&!seenKey('save',save.id))savePopup();
+  }
+  function savePopup(){
+    if(!save||saveBox)return;
+    buzz();
+    var s=save, nm=ABN[s.ab]||s.ab;
+    var rows=s.who.map(function(w,i){
+      var who=w.id===ID?'You':w.n, b=w.b==null?null:+w.b;
+      if(w.f==='fail')return '<p><b>'+esc(who)+'</b>: automatically fails (a condition). Nothing to roll.</p>';
+      return '<label>'+esc(who)+' <span style="font-weight:400;color:var(--tt-muted)">d20'+(b!=null?' '+sgn(b):'')+(w.f==='dis'?' · roll with disadvantage':'')+'</span>'+
+        '<input class="tt-init" data-sv="'+esc(w.id)+'" type="number" inputmode="numeric" aria-label="'+esc(who)+' save total" placeholder="Total"></label>';
+    }).join('');
+    saveBox=modal('<div class="tt-box" role="dialog" aria-modal="true" aria-labelledby="tt-sv"><h2 id="tt-sv">Make a '+esc(nm)+' save!</h2>'+
+      (s.label?'<p>'+esc(s.label)+'</p>':'')+'<p>Roll at the table and type your total (d20 plus the bonus shown).</p>'+rows+
+      '<p class="tt-msg" role="status"></p>'+
+      '<div class="tt-row"><button data-a="later">Later</button><button data-a="auto">Roll for me</button><button class="pri" data-a="send">Send</button></div></div>',
+      function(a,v,close){
+        var m=v.querySelector('.tt-msg'), out={}, miss=null, txt=[];
+        if(a==='later'){close();saveBox=null;draw();return}
+        var boxes=[].slice.call(v.querySelectorAll('[data-sv]'));
+        if(a==='auto')boxes.forEach(function(bx){
+          var w=s.who.find(function(x){return x.id===bx.dataset.sv}), r1=1+Math.floor(Math.random()*20), r2=1+Math.floor(Math.random()*20), d=w.f==='dis'?Math.min(r1,r2):r1;
+          bx.value=d+(+w.b||0); txt.push((w.id===ID?'You':w.n)+' rolled '+(w.f==='dis'?r1+'/'+r2+' → ':'')+d+(w.b?' '+sgn(+w.b):'')+' = '+bx.value);
+        });
+        boxes.forEach(function(bx){var x=parseInt(bx.value,10);if(isNaN(x)){if(!miss)miss=bx}else out[bx.dataset.sv]=x});
+        if(miss){m.textContent='Type the total you rolled first.';miss.focus();return}
+        sendSave(out);
+        if(a==='auto'){m.textContent=txt.join(' · ');setTimeout(function(){close();saveBox=null;draw()},1600)}else{close();saveBox=null;draw()}
+      });
+    saveBox.onEsc=function(){saveBox=null;draw()};
+    layer.querySelectorAll('[data-sv]').forEach(function(inp){inp.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();var s2=layer.querySelector('[data-a="send"]');if(s2)s2.click()}})});
+    draw();
+  }
+  function sendSave(values){
+    if(!db||!save)return; var id=save.id;
+    if(!Object.keys(values).length){saveSent=id;draw();return}
+    db.doc('party/turn-'+ID).set({act:'save',save:id,values:values,at:new Date().toISOString()})
+      .then(function(){saveSent=id;draw()},function(){msg='Couldn’t reach the DM. Tell the DM your save total.';draw()});
+  }
+  /* The DM ended combat: the fight recap, once. */
+  function onRecap(d){
+    var R=d&&!d.active&&d.recap; if(!R||!R.id||seenKey('recap',R.id))return;
+    if(Date.now()-Date.parse(R.at)>3*3600e3)return;
+    var tot=R.tot||{}, aw=R.awards||[];
+    modal('<div class="tt-box" role="dialog" aria-modal="true" aria-labelledby="tt-rc" style="max-width:480px"><h2 id="tt-rc">Fight recap</h2>'+
+      '<p>'+R.rounds+' round'+(R.rounds===1?'':'s')+(R.foes&&R.foes.n?' · '+R.foes.down+' of '+R.foes.n+' enem'+(R.foes.n===1?'y':'ies')+' defeated':'')+'</p>'+
+      '<div class="tt-tot">'+[['Damage dealt',tot.dealt],['Damage taken',tot.taken],['Healing',tot.healed],['Spell slots',tot.spells]].map(function(x){return '<div><b>'+(x[1]||0)+'</b><span>'+x[0]+'</span></div>'}).join('')+'</div>'+
+      (aw.length?'<ul class="tt-aw">'+aw.map(function(a){var me=(a.ids||[]).indexOf(ID)>=0;
+        return '<li'+(me?' class="me"':'')+'><span class="ic" aria-hidden="true">'+esc(a.icon)+'</span><div><b>'+esc(a.t)+'</b> <span class="dd">'+esc(a.d)+'</span><div>'+esc((a.who||[]).join(', '))+(a.v!=null?' · '+a.v+' '+esc(a.u):'')+(me?' <b>(you!)</b>':'')+'</div></div></li>'}).join('')+'</ul>':'<p>No awards this time.</p>')+
+      '<div class="tt-row"><button class="pri" data-a="ok">Nice!</button></div></div>',
+      function(a,v,close){close()});
+  }
   function onRound(d){
+    onSave(d);onRecap(d);
     var was=turnKey();
     round=d&&d.active?d:null;
     if(turnKey()!==was){sent='';msg=''}
@@ -77,6 +139,10 @@
     '.tt-box h2{margin:0;font-size:1.4rem;font-family:"Marcellus SC",Georgia,serif;font-weight:400}.tt-box p{margin:0;color:var(--tt-muted)}.tt-box .tt-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}'+
     '.tt-notes{margin:0;padding-left:20px;display:grid;gap:2px}.tt-box .tt-msg{color:var(--tt-acc);min-height:1.2em;font-weight:700}'+
     '.tt-box label{display:grid;gap:4px;font-weight:700}'+
+    '.tt-tot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.tt-tot div{display:grid;justify-items:center;border:1px solid var(--tt-rule);border-radius:6px;padding:6px 4px;text-align:center}'+
+    '.tt-tot b{font-size:1.3rem}.tt-tot span{font-size:.75rem;color:var(--tt-muted)}'+
+    '.tt-aw{list-style:none;margin:0;padding:0;display:grid;gap:8px}.tt-aw li{display:flex;gap:10px;align-items:flex-start;padding:4px 6px;border-radius:6px}'+
+    '.tt-aw li.me{background:color-mix(in srgb,var(--tt-acc) 16%,transparent)}.tt-aw .ic{font-size:1.4rem;width:1.6em;text-align:center}.tt-aw .dd{color:var(--tt-muted);font-size:.85rem}'+
     '.tt-init{font:inherit;font-size:1.3rem;padding:8px 10px;border:1px solid var(--tt-rule);border-radius:6px;background:var(--tt-bg);color:var(--tt-ink);width:100%;box-sizing:border-box}';
   document.head.appendChild(css);
   var root=document.createElement('div'); root.className='tt-root';
@@ -110,12 +176,16 @@
       h='<div class="tt-pill next"><span><b>Roll initiative</b> for the DM</span><button class="pri" data-tt="roll">Roll</button></div>';
     else if(rolledTxt)
       h='<div class="tt-pill"><span>'+esc(rolledTxt)+' · waiting for the fight to start</span></div>';
+    // an unanswered saving throw sits on top of everything else
+    if(save&&!saveBox)h=(saveSent===save.id?'<div class="tt-pill"><span>Save sent · waiting for the DM</span></div>':
+      '<div class="tt-pill mine"><span><b>Make a '+esc(ABN[save.ab]||save.ab)+' save!</b></span><button class="pri" data-tt="save">Roll</button></div>')+h;
     var o=orderBox();
     root.innerHTML=o||h?'<div class="tt-dock">'+o+h+'</div>':'';
   }
   root.addEventListener('click',function(ev){
     var b=ev.target.closest('button[data-tt]'), t=b&&b.dataset.tt;if(!b)return;
     if(t==='roll')rollPopup();
+    else if(t==='save')savePopup();
     else if(t==='hide'||t==='show'){setMin(t==='hide');var f=root.querySelector(t==='hide'?'[data-tt="show"]':'[data-tt="hide"]');if(f)f.focus()}
     else reply(t);
   });

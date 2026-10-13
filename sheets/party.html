@@ -239,6 +239,30 @@ input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15r
 .pk-roll input{width:auto;accent-color:var(--accent)}
 span.chip{border:1px solid var(--rule);display:inline-block}
 .ini-who .conds.wide{max-width:none}
+.sv-who{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;margin:0;display:grid;gap:8px}
+.sv-who legend{padding:0 4px}
+.sv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 14px}
+.sv-pair{display:grid;gap:2px}
+.sv-list{display:grid;gap:6px}
+.sv-row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;border:1px solid var(--rule);border-left-width:4px;border-radius:6px;padding:6px 10px;background:var(--bg)}
+.sv-row.pass{border-left-color:var(--good)}.sv-row.fail{border-left-color:var(--weak)}
+.sv-n{display:grid;min-width:9em;flex:1}
+.sv-t{display:inline-flex;gap:4px;align-items:center}.sv-t input{width:4.5em}
+.seg{display:inline-flex}.seg button{padding:3px 10px;font-size:.85rem}
+.seg button:first-child{border-radius:6px 0 0 6px}.seg button:last-child{border-radius:0 6px 6px 0;border-left:0}
+.seg button[aria-pressed="true"][data-v="pass"]{background:var(--good);border-color:var(--good);color:var(--panel)}
+.seg button[aria-pressed="true"][data-v="fail"]{background:var(--weak);border-color:var(--weak);color:var(--panel)}
+.rc-tot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0}
+.rc-tot div{display:grid;justify-items:center;border:1px solid var(--rule);border-radius:6px;padding:6px}
+.rc-tot b{font-size:1.4rem;font-variant-numeric:tabular-nums}
+.rc-aw{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.rc-aw li{display:flex;gap:10px;align-items:flex-start}
+.rc-i{font-size:1.5rem;line-height:1;width:1.6em;text-align:center}
+.loot-coins{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.loot-coins input{width:100%}
+#loot-items{display:grid;gap:6px}
+.loot-it{display:flex;gap:6px}.loot-it .loot-name{flex:1}.loot-it .loot-qty{width:4em}
+@media (max-width:520px){.rc-tot{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .lvl-tag{margin-top:4px;font-size:.78rem;font-weight:700;color:var(--muted)}
 .lvl-tag span{font-weight:400}
 .lvl-tag.on{color:var(--accent)}
@@ -782,6 +806,33 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     var paper=state.party.filter(function(p){return ids.indexOf(p.id)<0}).map(function(p){return p.name});
     if(sent.length)statusMsg='Level-up unlocked for '+sent.map(function(id){return byId(id).name}).join(', ')+'. Their sheets celebrate and open Level up.'+(paper.length?' Not on a live sheet: '+paper.join(', ')+' (change their level on Edit sheet).':'');
   }
+  // ---------- Loot: coins and items to a rider's sheet (party/conds '<rider>'.loot keeps the last 10 parcels) ----------
+  var COINS=['cp','sp','ep','gp','pp'];
+  function lootItemRow(){return '<div class="loot-it"><input class="loot-name" placeholder="Item (e.g. Potion of Healing)" aria-label="Item name" autocomplete="off"><input class="n loot-qty" inputmode="numeric" value="1" aria-label="Quantity"></div>'}
+  function openLoot(pick){
+    var ids=liveIds();
+    if(!ids.length){statusMsg='Loot goes to live sheets, and no rider is on one right now. Add it to paper riders’ notes on Edit sheet.';render();return}
+    dialog('loot-dlg','Send loot','<div class="stack" style="gap:10px">'+
+      '<label class="stack"><span class="lbl">To</span><select id="loot-who">'+ids.map(function(id){return '<option value="'+id+'"'+(id===pick?' selected':'')+'>'+esc(byId(id).name)+'</option>'}).join('')+'</select></label>'+
+      '<div><span class="lbl">Coins</span><div class="loot-coins">'+COINS.map(function(c){return '<label class="stack"><span class="lbl">'+c+'</span><input class="n" id="loot-'+c+'" inputmode="numeric" placeholder="0"></label>'}).join('')+'</div></div>'+
+      '<div><span class="lbl">Items</span><div id="loot-items">'+lootItemRow()+'</div><button id="loot-more" style="margin-top:6px">Add another item</button></div>'+
+      '<div class="dlg-actions"><button class="primary" id="loot-send">Send</button><span class="status" id="loot-status"></span></div>'+
+      '<p class="minor" style="margin:0">Coins add to their purse and items to their Equipment list (same name adds to the quantity). Their sheet pops up with what arrived.</p></div>');
+    var w=document.getElementById('loot-gp');if(w)w.focus();
+  }
+  function sendLoot(){
+    var st=document.getElementById('loot-status'), id=(document.getElementById('loot-who')||{}).value, coins={}, items=[];
+    COINS.forEach(function(c){var v=parseInt((document.getElementById('loot-'+c)||{}).value,10);if(v>0)coins[c]=v});
+    [].forEach.call(document.querySelectorAll('#loot-items .loot-it'),function(r){var nm=r.querySelector('.loot-name').value.trim(),q=parseInt(r.querySelector('.loot-qty').value,10);if(nm)items.push({name:nm,qty:q>0?q:1})});
+    if(!Object.keys(coins).length&&!items.length){st.textContent='Add some coins or an item first.';return}
+    var p=byId(id); if(!p)return;
+    var at=new Date().toISOString(), old=((dmConds[id]||{}).loot||{}).list||[];
+    var parcel={id:'lt'+Date.now().toString(36),at:at,coins:coins,items:items};
+    if(!sendCond(id,'loot',{list:old.concat([parcel]).slice(-10)})){st.textContent='Sending needs the online connection.';return}
+    var what=COINS.filter(function(c){return coins[c]}).map(function(c){return coins[c]+' '+c}).concat(items.map(function(i){return i.name+(i.qty>1?' ×'+i.qty:'')}));
+    statusMsg='Loot sent to '+p.name+': '+what.join(', ')+'.';
+    var dl=document.getElementById('loot-dlg');if(dl)dl.close();render();
+  }
   function riderRow(p){
     var c=crit(p.id), sn=speedNote(p.id), insp=inspOn(p.id), l=live(p), pi=l?pend(p.id).insp:null;
     if(editing){
@@ -1065,6 +1116,11 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       call:I.call&&!I.round?I.call.id:'', callFor:callFor(I),
       // the turn order players see on their sheets during combat: who's in the fight, in order
       order:I.round?I.list.filter(rolled).map(function(e){var o={n:shownName(e)};if(hero(e))o.id=e.id;if(e===c)o.cur=1;if(e.held)o.held=1;if(!hero(e)&&e.hpMax!=null&&e.hp<=0)o.down=1;var fc=hero(e)?[]:foeConds(e);if(fc.length)o.c=fc;return o}):[]};
+    // an open saving throw: who still has to roll, with their bonus (never the DC)
+    var S=play.save;
+    if(S){var sw=S.who.filter(function(c){return rollsOnSheet(c)&&S.res[c].t==null&&!S.res[c].auto});
+      if(sw.length)doc.save={id:S.id+':'+(S.ask||1),ab:S.ab,label:S.label,who:sw.map(function(c){var fl=saveFlag(c,S.ab);return {id:c,n:critName(c),b:saveBonus(c,S.ab),f:fl||''}})};}
+    var R=!I.round&&freshRecap(); if(R)doc.recap=R;
     var key=JSON.stringify(doc);
     if(!cloudDb||key===lastRoundKey) return; lastRoundKey=key;
     doc.at=new Date().toISOString();
@@ -1083,6 +1139,13 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       var got=[];
       Object.keys(d.values||{}).forEach(function(k){var e=entry(I,k),v=parseInt(d.values[k],10);if(!e||hero(e)!==p||isNaN(v))return;setInit(e.id,v);got.push(eName(e)+' '+v)});
       if(got.length){statusMsg='Initiative: '+got.join(', ')+'.'+(callFor(I).length?'':' Everyone’s in.');postRound();render()}
+      return;
+    }
+    if(d.act==='save'){
+      var S=play.save; if(!S||String(d.save).split(':')[0]!==S.id)return;
+      var got2=[];
+      Object.keys(d.values||{}).forEach(function(k){var v=parseInt(d.values[k],10);if(S.who.indexOf(k)<0||riderOf(k)!==p||isNaN(v)||!S.res[k])return;setTotal(S,k,v,'player');got2.push(critName(k)+' '+v+' ('+S.res[k].out+')')});
+      if(got2.length){savePlay();statusMsg=(S.label||ABN[S.ab]+' save')+': '+got2.join(', ')+'.';postRound();render()}
       return;
     }
     if(!I.round||d.cid!==I.cid||+d.round!==I.round)return;
@@ -1210,6 +1273,184 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
         '<label class="minor pk-roll"><input type="checkbox" id="enc-roll"'+(encForm.roll?' checked':'')+'> Roll initiative for them</label>':'<p class="minor" style="margin:0">No saved encounters yet.</p>')+
       '</section>';
   }
+  // ---------- Saving throws: the DM picks a save, a secret DC and who's caught; live sheets roll and send their totals ----------
+  // play.save = {id, ask, ab, dc, label, amt, amtTxt, type, on:'half'|'none'|'full', cond, rounds, who:[cid], res:{cid:{t, by, out, dmg, auto}}}
+  var saveOpen=false, saveForm={ab:'dex',type:'untyped',on:'half',who:{}};
+  var ABN={str:'Strength',dex:'Dexterity',con:'Constitution',int:'Intelligence',wis:'Wisdom',cha:'Charisma'};
+  function riderOf(cid){return byId(String(cid).replace(/-dragon$/,''))}
+  function saveBonus(cid,ab){
+    var p=riderOf(cid); if(!p)return null;
+    if(!/-dragon$/.test(cid))return stat(p,'s'+ab);
+    var m=mod(p.dragon[ab]); return m==null?null:m+(String(p.dragon.saves||'').toLowerCase().indexOf(ab)>=0?pb(p):0);
+  }
+  // a rider (or their dragon) whose player rolls on their own sheet
+  function rollsOnSheet(cid){var p=riderOf(cid);return !!(p&&hasSheet(p)&&!p.paper&&live(p))}
+  // Evasion from the hero's notes (or the dragon's traits): 'improved', 'evasion' or ''
+  function evasion(cid){
+    var p=riderOf(cid); if(!p)return '';
+    var txt=/-dragon$/.test(cid)?(p.dragon.features||[]).map(function(f){return f.name+' '+f.text}).join(' ')+' '+(p.dragon.aspects||''):(p.notes||'')+' '+((live(p)||{}).defenses||'');
+    return /improved\s+evasion/i.test(txt)?'improved':/\bevasion\b/i.test(txt)?'evasion':'';
+  }
+  // what a pass or a fail does, with Evasion on a Dexterity save against a "half on a save" effect (2014 rules)
+  function dmgFor(S,cid,out){
+    if(!out)return '';
+    var ev=S.ab==='dex'&&S.on==='half'?evasion(cid):'';
+    if(out==='pass')return ev?'none':S.on;
+    return ev==='improved'?'half':'full';
+  }
+  function dmgAmt(S,how){return how==='full'?S.amt:how==='half'?Math.floor(S.amt/2):0}
+  function setOut(S,cid,out){var r=S.res[cid];r.out=out;r.dmg=dmgFor(S,cid,out)}
+  function setTotal(S,cid,t,by){
+    var r=S.res[cid]; r.t=t; r.by=by;
+    if(t==null){if(!r.auto)setOut(S,cid,'');return}
+    setOut(S,cid,r.auto==='fail'?'fail':t>=S.dc?'pass':'fail');
+  }
+  function readSaveForm(){
+    function v(id){var el=document.getElementById(id);return el?el.value:''}
+    if(!document.getElementById('sv-ab'))return;
+    var who={};[].forEach.call(document.querySelectorAll('[data-svwho]'),function(cb){if(cb.checked)who[cb.dataset.svwho]=true});
+    saveForm={ab:v('sv-ab'),dc:v('sv-dc'),label:v('sv-label'),amt:v('sv-amt'),type:v('sv-type'),on:v('sv-on'),cond:v('sv-cond'),rounds:v('sv-rounds'),who:who};
+  }
+  function startSave(){
+    readSaveForm();
+    var f=saveForm, dc=parseInt(f.dc,10), who=Object.keys(f.who).filter(function(k){return f.who[k]&&crit(k)});
+    if(isNaN(dc)){statusMsg='Type the DC first (only you see it).';return 'sv-dc'}
+    if(!who.length){statusMsg='Tick who’s caught.';return 'sv-go'}
+    var raw=String(f.amt||'').trim(), amt=raw?hpRoll(raw):0, dice=/d/i.test(raw);
+    if(raw&&amt==null){statusMsg='Damage is a number (48) or dice (8d6).';return 'sv-amt'}
+    var S={id:'sv'+Date.now().toString(36),ask:1,ab:f.ab,dc:dc,label:String(f.label||'').trim(),amt:amt||0,amtTxt:dice?raw+' → '+amt:'',type:f.type||'untyped',on:f.on||'half',
+      cond:f.cond||'',rounds:parseInt(f.rounds,10)||0,who:who,res:{}};
+    who.forEach(function(cid){
+      var fl=saveFlag(cid,S.ab);S.res[cid]={t:null,by:'',out:'',dmg:'',auto:fl==='fail'?'fail':''};
+      if(fl==='fail')setOut(S,cid,'fail');
+    });
+    play.save=S;savePlay();postRound();
+    var ask=who.filter(rollsOnSheet).map(critName), you=who.filter(function(c){return !rollsOnSheet(c)}).map(critName);
+    statusMsg=ABN[S.ab]+' save'+(ask.length?': asked '+ask.join(', ')+' on their sheets':'')+(you.length?(ask.length?'; ':': ')+'type totals for '+you.join(', '):'')+'.'+(S.amtTxt?' Damage rolled: '+S.amtTxt+'.':'');
+    return '';
+  }
+  function saveLine(S){
+    var bits=[ABN[S.ab]+' save, DC '+S.dc];
+    if(S.label)bits.push(S.label);
+    if(S.amt)bits.push(S.amt+(S.type&&S.type!=='untyped'?' '+S.type:'')+' damage, '+(S.on==='half'?'half':S.on==='none'?'none':'full')+' on a save');
+    if(S.cond)bits.push(condDef(S.cond)[1]+' on a fail'+(S.rounds?' for '+roundsTxt(S.rounds):''));
+    return bits.join(' · ');
+  }
+  function saveView(){
+    var S=play.save;
+    if(!S){
+      var f=saveForm;
+      return '<section class="pick" aria-labelledby="sv-h"><div class="pk-head"><h2 id="sv-h">Saving throw</h2><button class="ghost" id="sv-close">Close</button></div>'+
+        '<div class="pk-row"><label class="stack"><span class="lbl">Save</span><select id="sv-ab">'+AB.map(function(a){return '<option value="'+a+'"'+(f.ab===a?' selected':'')+'>'+ABN[a]+'</option>'}).join('')+'</select></label>'+
+        '<label class="stack" title="Only you see the DC"><span class="lbl">DC (hidden)</span><input class="n" id="sv-dc" inputmode="numeric" value="'+esc(f.dc||'')+'" placeholder="15"></label>'+
+        '<label class="stack" style="flex:2;min-width:9em"><span class="lbl">Effect</span><input id="sv-label" value="'+esc(f.label||'')+'" placeholder="Fireball" autocomplete="off"></label></div>'+
+        '<div class="pk-row"><label class="stack"><span class="lbl">Damage</span><input class="n" id="sv-amt" value="'+esc(f.amt||'')+'" placeholder="48 or 8d6" style="width:7em"></label>'+
+        '<label class="stack"><span class="lbl">Type</span><select id="sv-type">'+TYPES.map(function(t){return '<option value="'+t+'"'+(f.type===t?' selected':'')+'>'+t.charAt(0).toUpperCase()+t.slice(1)+'</option>'}).join('')+'</select></label>'+
+        '<label class="stack"><span class="lbl">On a save</span><select id="sv-on">'+[['half','Half damage'],['none','No damage'],['full','Full damage']].map(function(o){return '<option value="'+o[0]+'"'+(f.on===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select></label>'+
+        '<label class="stack"><span class="lbl">Condition on a fail</span><select id="sv-cond"><option value="">None</option>'+CONDS.filter(function(c){return c[0]!=='concentrating'}).map(function(c){return '<option value="'+c[0]+'"'+(f.cond===c[0]?' selected':'')+'>'+c[1]+'</option>'}).join('')+'</select></label>'+
+        '<label class="stack" title="Leave empty to keep it until removed"><span class="lbl">For rounds</span><input class="n" id="sv-rounds" inputmode="numeric" value="'+esc(f.rounds||'')+'" placeholder="—"></label></div>'+
+        '<fieldset class="sv-who"><legend class="lbl">Who’s caught</legend><div class="sv-grid">'+state.party.map(function(p){
+          return '<div class="sv-pair">'+[[p.id,p.name],[did(p),dName(p)]].map(function(x){
+            return '<label class="pk-roll"><input type="checkbox" data-svwho="'+x[0]+'"'+(f.who[x[0]]?' checked':'')+'> '+esc(x[1])+(rollsOnSheet(x[0])?'':' <span class="minor">(you type)</span>')+'</label>'}).join('')+'</div>'}).join('')+'</div>'+
+        '<div class="ini-tools"><button id="sv-all">Everyone</button><button id="sv-riders">Riders</button><button id="sv-dragons">Dragons</button><button id="sv-none">Nobody</button></div></fieldset>'+
+        '<div class="pk-row"><button class="primary" id="sv-go">Ask for saves</button></div>'+
+        '<p class="minor" style="margin:0">Riders on live sheets get a pop-up with their own bonus and type the total they roll at the table. They never see the DC. Evasion is read from a rider’s notes (or a dragon’s traits).</p></section>';
+    }
+    var wait=S.who.filter(function(c){return S.res[c].t==null&&!S.res[c].auto&&rollsOnSheet(c)}).length;
+    return '<section class="pick" aria-labelledby="sv-h"><div class="pk-head"><h2 id="sv-h">'+esc(S.label||'Saving throw')+'</h2><button class="ghost" id="sv-close">Hide</button></div>'+
+      '<p class="minor" style="margin:0;white-space:normal">'+esc(saveLine(S))+(S.amtTxt?' (rolled '+esc(S.amtTxt)+')':'')+'</p>'+
+      '<div class="sv-list">'+S.who.map(function(cid){
+        var r=S.res[cid], b=saveBonus(cid,S.ab), fl=saveFlag(cid,S.ab), ev=S.ab==='dex'&&S.on==='half'?evasion(cid):'', ph=rollsOnSheet(cid)?'waiting…':'total';
+        return '<div class="sv-row'+(r.out?' '+r.out:'')+'"><div class="sv-n"><b>'+esc(critName(cid))+'</b><span class="minor">'+(b==null?'—':sg(b))+(fl?' · '+(fl==='fail'?'auto-fail':'disadvantage'):'')+(ev?' · '+(ev==='improved'?'Improved Evasion':'Evasion'):'')+'</span></div>'+
+          '<span class="sv-t"><input class="n" data-svt="'+cid+'" inputmode="numeric" value="'+(r.t==null?'':r.t)+'" placeholder="'+ph+'" aria-label="'+esc(critName(cid))+' save total">'+(r.by==='player'?'<span class="live" title="Sent from their sheet">●</span>':'')+'</span>'+
+          '<span class="seg"><button data-svout="'+cid+'" data-v="pass" aria-pressed="'+(r.out==='pass')+'">Pass</button><button data-svout="'+cid+'" data-v="fail" aria-pressed="'+(r.out==='fail')+'">Fail</button></span>'+
+          (S.amt?'<select data-svdmg="'+cid+'" aria-label="'+esc(critName(cid))+' damage">'+(r.out?'':'<option value="">Damage…</option>')+[['full','Full'],['half','Half'],['none','None']].map(function(o){return '<option value="'+o[0]+'"'+(r.dmg===o[0]?' selected':'')+'>'+o[1]+' ('+dmgAmt(S,o[0])+')</option>'}).join('')+'</select>':'')+
+          (S.cond&&r.out==='fail'?'<span class="chip on">'+esc(condDef(S.cond)[1])+'</span>':'')+'</div>';
+      }).join('')+'</div>'+
+      '<div class="ini-tools"><button class="primary" id="sv-apply">Apply</button>'+(wait?'<button id="sv-again" title="Show the pop-up again on sheets that haven’t answered">Ask again ('+wait+' waiting)</button>':'')+'<button class="ghost" id="sv-cancel">Cancel save</button></div></section>';
+  }
+  function applySave(){
+    var S=play.save, I=ini(); if(!S)return;
+    var done=[], skip=[];
+    S.who.forEach(function(cid){
+      var r=S.res[cid], c=crit(cid), nm=critName(cid); if(!c)return;
+      if(!r.out){skip.push(nm);return}
+      var amt=S.amt?dmgAmt(S,r.dmg||'full'):0, bit=nm+' '+r.out;
+      if(amt>0){
+        if(c.live){sendHp(cid,{amt:amt,type:S.type});logs[cid]='Sent '+amt+(S.type==='untyped'?'':' '+S.type)+' damage ('+(S.label||'save')+') to '+c.p.name+'’s sheet';}
+        else{var was=lastType[cid];lastType[cid]=S.type;applyHp(c,amt,false);lastType[cid]=was;}
+        bit+=' −'+amt;
+      }
+      if(r.out==='fail'&&S.cond){
+        setCondFor(cid,S.cond,true);
+        if(S.rounds>0&&I.round)I.fx.push({id:'fx'+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:condDef(S.cond)[1],who:entryOf(cid),cond:S.cond,applied:[cid],anchor:I.turn,total:S.rounds,el:0});
+        bit+=', '+condDef(S.cond)[1].toLowerCase();
+      }
+      done.push(bit);
+    });
+    play.save=null;saveOpen=false;savePlay();postRound();
+    statusMsg=(S.label||ABN[S.ab]+' save')+': '+(done.join(' · ')||'nothing applied')+(skip.length?'. Skipped (no roll): '+skip.join(', '):'')+'.';
+  }
+
+  // ---------- Fight recap: tallied while combat runs, shown on End combat here and on the players' sheets ----------
+  // I.stats = {dealt, healed, kills, spells: {riderId: n}, taken, hits: {creatureId: n}, hp: {creatureId: {c, t}}, slots: {riderId: n}}
+  function newStats(){return {dealt:{},healed:{},kills:{},spells:{},taken:{},hits:{},hp:{},slots:{}}}
+  function bump(m,k,v){m[k]=(m[k]||0)+v}
+  // whoever's turn it is, when that's a rider (their dragon acts on the same turn)
+  function turnRider(I){var c=I.round?entry(I,I.turn):null,p=hero(c);return p?p.id:''}
+  function creditFoeHp(I,e,was){
+    if(!I.round||!I.stats||e.lair)return; var rid=turnRider(I); if(!rid)return;
+    var lost=Math.max(0,Math.min(was,was-e.hp)); if(was<=0)lost=0;
+    if(lost)bump(I.stats.dealt,rid,lost);
+    if(was>0&&e.hp<=0)bump(I.stats.kills,rid,1);
+  }
+  // Heroes: damage taken counts from their HP (and temp HP) actually going down; healing counts for whoever's turn it is.
+  function trackFight(){
+    var I=ini(); if(!I.round||!I.stats)return; var S=I.stats, changed=false, rid=turnRider(I);
+    I.list.filter(function(e){return hero(e)&&rolled(e)}).forEach(function(e){
+      var p=hero(e);
+      [p.id,did(p)].forEach(function(cid){
+        var cr=crit(cid); if(!cr)return; var cur=curHp(cr); if(cur==null)return;
+        var tmp=cr.live?(+cr.live.temp||0):(+play.temp[cid]||0), pv=S.hp[cid];
+        if(!pv){S.hp[cid]={c:cur,t:tmp};changed=true;return}
+        var lost=(pv.c+pv.t)-(cur+tmp);
+        if(lost>0){bump(S.taken,cid,lost);bump(S.hits,cid,1)}
+        if(cur>pv.c&&rid)bump(S.healed,rid,cur-pv.c);
+        if(pv.c!==cur||pv.t!==tmp){S.hp[cid]={c:cur,t:tmp};changed=true}
+      });
+      var l=live(p); if(l&&l.slots!=null){var ps=S.slots[p.id];
+        if(ps==null){S.slots[p.id]=+l.slots;changed=true}
+        else if(+l.slots!==ps){if(+l.slots>ps)bump(S.spells,p.id,+l.slots-ps);S.slots[p.id]=+l.slots;changed=true}}
+    });
+    if(changed)savePlay();
+  }
+  function makeRecap(I){
+    var S=I.stats||newStats(), fighters=I.list.filter(function(e){return hero(e)&&rolled(e)}).map(hero);
+    var foes=I.list.filter(function(e){return !hero(e)&&!e.lair}), down=foes.filter(function(e){return e.hpMax!=null&&e.hp<=0}).length;
+    function team(id){var p=byId(id);return p?p.name+' / '+dName(p):id}
+    function sum(m){return Object.keys(m).reduce(function(a,k){return a+m[k]},0)}
+    function top(m,name){var best=0,who=[];Object.keys(m).forEach(function(k){if(m[k]>best){best=m[k];who=[k]}else if(m[k]===best&&best>0)who.push(k)});return best>0?{v:best,ids:who,who:who.map(name)}:null}
+    var aw=[];
+    function add(k,icon,t,d,m,name,u){var x=top(m,name);if(x)aw.push({k:k,icon:icon,t:t,d:d,v:x.v,u:x.v===1?u.replace(/ies$/,'y').replace(/s$/,''):u,who:x.who,ids:x.ids.map(function(i){return i.replace(/-dragon$/,'')})})}
+    add('hitter','⚔️','Heavy Hitter','most damage dealt',S.dealt,team,'damage');
+    add('bag','🛡️','Punching Bag','most damage taken',S.taken,critName,'damage taken');
+    add('magnet','🧲','Trouble Magnet','hit most often',S.hits,critName,'hits');
+    add('medic','✚','Field Medic','most healing',S.healed,team,'HP healed');
+    add('slinger','✨','Spell Slinger','most spell slots spent',S.spells,function(id){var p=byId(id);return p?p.name:id},'slots');
+    add('finisher','💀','Finisher','most enemies dropped',S.kills,team,'enemies');
+    var clean=[];fighters.forEach(function(p){[p.id,did(p)].forEach(function(cid){if(!S.taken[cid])clean.push(cid)})});
+    if(clean.length&&fighters.length)aw.push({k:'untouchable',icon:'🌀',t:'Untouchable',d:'took no damage',who:clean.map(critName),ids:clean.map(function(i){return i.replace(/-dragon$/,'')})});
+    return {id:'rc'+Date.now().toString(36),at:new Date().toISOString(),rounds:I.round,foes:{n:foes.length,down:down},
+      tot:{dealt:sum(S.dealt),taken:sum(S.taken),healed:sum(S.healed),spells:sum(S.spells)},awards:aw};
+  }
+  function recapHtml(R){
+    return '<p class="minor" style="margin:0">'+R.rounds+' round'+(R.rounds===1?'':'s')+(R.foes.n?' · '+R.foes.down+' of '+R.foes.n+' enem'+(R.foes.n===1?'y':'ies')+' defeated':'')+'</p>'+
+      '<div class="rc-tot">'+[['Damage dealt',R.tot.dealt],['Damage taken',R.tot.taken],['Healing',R.tot.healed],['Spell slots',R.tot.spells]].map(function(x){return '<div><b>'+x[1]+'</b><span class="lbl">'+x[0]+'</span></div>'}).join('')+'</div>'+
+      (R.awards.length?'<ul class="rc-aw">'+R.awards.map(function(a){return '<li><span class="rc-i" aria-hidden="true">'+a.icon+'</span><div><b>'+esc(a.t)+'</b> <span class="minor">'+esc(a.d)+'</span><div>'+esc(a.who.join(', '))+(a.v!=null?' · '+a.v+' '+esc(a.u):'')+'</div></div></li>'}).join('')+'</ul>':'<p class="minor">No awards this time.</p>');
+  }
+  function showRecap(R){dialog('recap-dlg','Fight recap',recapHtml(R)+'<p class="minor" style="margin:10px 0 0">The riders’ sheets show this recap too.</p>')}
+  function freshRecap(){var R=play.recap;return R&&Date.now()-Date.parse(R.at)<3*3600e3?R:null}
+
   function addLair(I){
     if(I.list.some(function(e){return e.lair}))return false;
     I.list.push({id:'dm-lair'+Date.now().toString(36),name:'Lair actions',lair:true,init:20,tb:-1000,note:''});sortInit(I);return true;
@@ -1276,6 +1517,8 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     var tools='<div class="ini-tools">'+(active||!anyLive?'':I.call?'<button id="ini-call-stop" title="Stop asking; type the rest yourself">Stop asking'+(asking.length?' ('+asking.length+' to go)':'')+'</button>':
         '<button id="ini-call" title="Each rider on a live sheet without a roll gets asked to roll on their own sheet">Ask players to roll</button>')+
       '<button class="primary" id="ini-add" aria-expanded="'+adding+'">Add enemies</button><button id="ini-enc" aria-expanded="'+encOpen+'">Encounters</button>'+
+      '<button id="ini-save" aria-expanded="'+saveOpen+'">Saving throw'+(play.save?' · open':'')+'</button>'+
+      (!active&&freshRecap()?'<button id="ini-recap">Last fight recap</button>':'')+
       (I.list.some(function(e){return e.lair})?'':'<button id="ini-lair" title="Lair actions take a turn on initiative 20, losing ties">Add lair</button>')+
       '<button id="ini-sort" title="Re-sort by initiative">Sort</button>'+
       (confirmNewFight?'<button class="primary" id="ini-new-yes">Yes, clear for a new fight</button><button id="ini-new-no">Cancel</button>':'<button id="ini-new" title="Clears every roll and the enemies; timers keep running">New fight</button>')+'</div>';
@@ -1293,7 +1536,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       (I.fx.length?I.fx.map(function(f){return fxCard(I,f)}).join(''):'<p class="minor" style="margin:0">No timers running.</p>')+
       (!active&&I.fx.some(function(f){return !ended(f)})?'<div class="ini-tools"><button id="fx-min" title="Outside combat: every timer loses 10 rounds">Pass 1 minute</button><button id="fx-10min">Pass 10 minutes</button></div>':'')+
       '</section>';
-    return '<div class="ini"><div class="ini-main">'+bar+alert+tools+(adding?addView():'')+(encOpen?encView():'')+list+'</div>'+side+'</div>';
+    return '<div class="ini"><div class="ini-main">'+bar+alert+tools+(saveOpen?saveView():'')+(adding?addView():'')+(encOpen?encView():'')+list+'</div>'+side+'</div>';
   }
   function setInit(id,v){
     var I=ini(), e=entry(I,id); if(!e) return;
@@ -1321,13 +1564,14 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     if(isNaN(v)||!v){statusMsg='Type an amount in the ± box first.';render();return}
     if(raw[0]==='-'||raw[0]==='+'){dir=v<0?-1:1;v=Math.abs(v)}
     var was=e.hp; e.hp=dir<0?e.hp-v:Math.min(e.hpMax,e.hp+v);
+    if(dir<0)creditFoeHp(I,e,was);
     statusMsg=e.name+(dir<0?' takes '+v:' heals '+(e.hp-was))+' → '+e.hp+' / '+e.hpMax+' HP'+(e.hp<=0&&was>0?'. Down!':'');
     savePlay();render();
   }
 
   // ---------- Page ----------
   function render(){
-    postRound();
+    trackFight();postRound();
     var root=document.getElementById('root'), tools, I=ini(), ir=I.round, onInit=view==='init'&&!editing;
     if(editing){
       tools=(ask==='restore'?'<button id="restore-yes">Yes, restore originals</button><button id="ask-no">Keep my edits</button>':'<button id="restore-btn">Restore original stats</button>')+
@@ -1338,7 +1582,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
           ask==='lvl'?'<button class="primary" id="lvl-yes">Yes, unlock a level for every rider</button><button id="ask-no">Cancel</button>':
           ask==='lvlback'?'<button class="primary" id="lvlback-yes">Yes, take back the level-ups</button><button id="ask-no">Cancel</button>':
           '<button id="short-btn">Short rest</button><button id="long-btn">Long rest</button><button id="lvl-btn" title="Milestone: unlock Level up on every rider’s sheet">Milestone level up</button>'+
-          (state.party.some(function(p){return granted(p.id)})?'<button id="lvlback-btn" title="Lock Level up again for everyone you unlocked it for; level-ups made with it are undone">Undo level-up</button>':''))+allPaperBtn()+
+          '<button id="loot-btn" title="Send coins and items to a rider’s sheet">Send loot</button>'+(state.party.some(function(p){return granted(p.id)})?'<button id="lvlback-btn" title="Lock Level up again for everyone you unlocked it for; level-ups made with it are undone">Undo level-up</button>':''))+allPaperBtn()+
         (onInit?'':'<button id="fold-btn">'+(anyClosed?'Show all dragons':'Hide all dragons')+'</button>')+'<button id="export-btn">Export backup</button><button id="import-btn">Import backup</button><button class="primary" id="edit-btn">Edit sheet</button>';
     }
     root.innerHTML='<header><div><h1>Dragon Riders of Arcanum</h1><p class="sub">The Homies · Isle of Droojh · D&amp;D 5e · updated '+esc(state.updated)+'</p></div>'+
@@ -1433,6 +1677,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='lvl-btn'){if(!liveIds().length){statusMsg='No rider is on a live sheet. Change levels on Edit sheet.';render();return}ask='lvl';render();var ly=document.getElementById('lvl-yes');if(ly)ly.focus();return}
     else if(t.id==='lvl-yes'){ask='';unlockLevel(liveIds());render();var lb2=document.getElementById('lvl-btn');if(lb2)lb2.focus();return}
     else if(ds.lvlone){unlockLevel([ds.lvlone]);render();return}
+    else if(t.id==='loot-btn'){openLoot();return}
+    else if(t.id==='loot-more'){var li=document.getElementById('loot-items');li.insertAdjacentHTML('beforeend',lootItemRow());var ln=li.querySelectorAll('.loot-name');ln[ln.length-1].focus();return}
+    else if(t.id==='loot-send'){sendLoot();return}
     else if(t.id==='lvlback-btn'){ask='lvlback';render();var lby=document.getElementById('lvlback-yes');if(lby)lby.focus();return}
     else if(t.id==='lvlback-yes'){ask='';takeBack(state.party.filter(function(p){return granted(p.id)}).map(function(p){return p.id}));render();var lb3=document.getElementById('lvl-btn');if(lb3)lb3.focus();return}
     else if(ds.lvlback){takeBack([ds.lvlback]);render();return}
@@ -1516,10 +1763,18 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='load-json'){importText(document.getElementById('import-text').value);}
     // initiative
     else if(t.id==='ini-call'||t.id==='ini-call-stop')initGo(function(I){if(t.id==='ini-call'){I.call={id:Date.now().toString(36)};statusMsg=callFor(I).length?'Asked the players on live sheets to roll ('+callFor(I).length+' rolls).':'Everyone on a live sheet already has a roll.'}else{delete I.call;statusMsg=''}});
-    else if(t.id==='ini-start')initGo(function(I){delete I.call;sortInit(I);I.list.forEach(function(e){e.held=false;e.started=0});I.fx.forEach(function(f){delete f.tr});I.round=1;I.turn='';I.cid=Date.now().toString(36);nextTurn(I)});
+    else if(t.id==='ini-start')initGo(function(I){delete I.call;I.stats=newStats();play.recap=null;sortInit(I);I.list.forEach(function(e){e.held=false;e.started=0});I.fx.forEach(function(f){delete f.tr});I.round=1;I.turn='';I.cid=Date.now().toString(36);nextTurn(I)});
     else if(t.id==='ini-next')initGo(nextTurn);
     else if(t.id==='ini-prev')initGo(prevTurn);
-    else if(t.id==='ini-end')initGo(function(I){I.round=0;I.turn='';I.list.forEach(function(e){e.held=false;e.started=0});I.fx.forEach(function(f){f.anchor='';delete f.tr})});
+    else if(t.id==='ini-end'){trackFight();initGo(function(I){play.recap=makeRecap(I);delete I.stats;I.round=0;I.turn='';I.list.forEach(function(e){e.held=false;e.started=0});I.fx.forEach(function(f){f.anchor='';delete f.tr})});if(play.recap)showRecap(play.recap);return}
+    else if(t.id==='ini-recap'){if(play.recap)showRecap(play.recap);return}
+    else if(t.id==='ini-save'||t.id==='sv-close'){saveOpen=t.id==='ini-save'?!saveOpen:false;render();var sf=document.getElementById(saveOpen?(play.save?'sv-apply':'sv-ab'):'ini-save');if(sf)sf.focus();return}
+    else if(t.id==='sv-all'||t.id==='sv-riders'||t.id==='sv-dragons'||t.id==='sv-none'){readSaveForm();var nw={};state.party.forEach(function(p){if(t.id==='sv-all'||t.id==='sv-riders')nw[p.id]=true;if(t.id==='sv-all'||t.id==='sv-dragons')nw[did(p)]=true});saveForm.who=nw;render();return}
+    else if(t.id==='sv-go'){var bad=startSave();render();var sg2=document.getElementById(bad||'sv-apply');if(sg2)sg2.focus();return}
+    else if(ds.svout){var S0=play.save;if(S0&&S0.res[ds.svout]){setOut(S0,ds.svout,S0.res[ds.svout].out===ds.v?'':ds.v);savePlay();}render();var so=document.querySelector('[data-svout="'+ds.svout+'"][data-v="'+ds.v+'"]');if(so)so.focus();return}
+    else if(t.id==='sv-apply'){applySave();render();var ib3=document.getElementById('ini-save');if(ib3)ib3.focus();return}
+    else if(t.id==='sv-cancel'){play.save=null;savePlay();postRound();statusMsg='Save cancelled.';render();return}
+    else if(t.id==='sv-again'){if(play.save){play.save.ask=(play.save.ask||1)+1;savePlay();postRound();statusMsg='Asked again.';}render();return}
     else if(t.id==='ini-sort'){I=ini();sortInit(I);savePlay();render();}
     else if(t.id==='ini-add'){adding=!adding;render();var af=document.getElementById(adding?'ad-name':'ini-add');if(af)af.focus();return}
     else if(t.id==='ad-close'){adding=false;render();var ib=document.getElementById('ini-add');if(ib)ib.focus();return}
@@ -1591,6 +1846,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(el.id==='fx-name'||el.id==='fx-dur'){e.preventDefault();var fb=document.getElementById('fx-add');if(fb)fb.click();}
     else if(/^ad-/.test(el.id)&&el.id!=='ad-roll'){e.preventDefault();var gb=document.getElementById('ad-go');if(gb)gb.click();}
     else if(el.id==='enc-name'){e.preventDefault();var sb=document.getElementById('enc-save');if(sb)sb.click();}
+    // Enter in a save total moves to the next one
+    else if(ds.svt){e.preventDefault();var al=[].slice.call(document.querySelectorAll('[data-svt]')),nx2=al[al.indexOf(el)+1];el.blur();if(nx2){var k2=nx2.dataset.svt;setTimeout(function(){var f=document.querySelector('[data-svt="'+k2+'"]');if(f){f.focus();f.select()}},0)}}
+    else if(/^sv-/.test(el.id)&&el.tagName==='INPUT'){e.preventDefault();var gv=document.getElementById('sv-go');if(gv)gv.click();}
   });
   document.addEventListener('input',function(e){
     var el=e.target, ds=el.dataset, I;
@@ -1613,12 +1871,15 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       var a=document.activeElement, sel=null, key=a&&a.dataset&&['ini','iname','inote','idmg','ihpcur'].find(function(k){return a.dataset[k]});
       if(key)sel='[data-'+key+'="'+a.dataset[key]+'"]';else if(a&&a.id)sel='#'+a.id;
       render();var f=sel&&document.querySelector(sel);if(f)f.focus();},0);return}
-    if(ds.ihpcur){var Ih=ini(),eh=entry(Ih,ds.ihpcur),hv=n(el.value);if(eh&&hv!=null){eh.hp=hv;savePlay();}softRender();return}
+    if(ds.ihpcur){var Ih=ini(),eh=entry(Ih,ds.ihpcur),hv=n(el.value);if(eh&&hv!=null){var hw=eh.hp;eh.hp=hv;if(hv<hw)creditFoeHp(Ih,eh,hw);savePlay();}softRender();return}
     if(el.id==='fx-unit'){fxForm.unit=el.value;render();var fu=document.getElementById('fx-unit');if(fu)fu.focus();return}
     if(el.id==='fx-who'){fxForm.who=el.value;return}
     if(el.id==='ad-name'){readAddForm();var fk=foeKey(el.value);if(state.foes[fk]&&!addForm.hp&&!addForm.ac&&fillFromFoe(fk)){render();var cn=document.getElementById('ad-count');if(cn){cn.focus();cn.select()}}return}
     if(/^ad-/.test(el.id)){readAddForm();return}
     if(el.id==='enc-roll'){encForm.roll=el.checked;return}
+    if(/^sv-/.test(el.id)||ds.svwho){readSaveForm();return}
+    if(ds.svt){var S1=play.save,tv2=n(el.value);if(S1&&S1.res[ds.svt]){setTotal(S1,ds.svt,tv2,'dm');savePlay();}setTimeout(function(){var a=document.activeElement,k=a&&a.dataset&&a.dataset.svt;render();var f=k&&document.querySelector('[data-svt="'+k+'"]');if(f)f.focus();},0);return}
+    if(ds.svdmg){var S2=play.save;if(S2&&S2.res[ds.svdmg]){S2.res[ds.svdmg].dmg=el.value;savePlay();}return}
     var p=ds.id&&byId(ds.id); if(!p)return;
     if(ds.dsp){var set=AB.filter(function(a){var cb=document.getElementById('dsp-'+a+'-'+p.id);return cb&&cb.checked});p.dragon.saves=set.join(',');dirty=true;}
     else if(ds.dk==='bond'){p.dragon.bond=el.value;var cap=TKNOWN[bondLv(p)];if(p.dragon.tactics.length>cap)p.dragon.tactics=p.dragon.tactics.slice(0,cap);dirty=true;render();}
