@@ -207,7 +207,9 @@ input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15r
 .tag.fx{background:var(--accent-soft);color:var(--accent);text-transform:none;letter-spacing:0}
 .tag.fx.ended{background:var(--weak-soft);color:var(--weak)}
 .tag.down{background:var(--weak);color:var(--panel)}
-.ini-act{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.ini-act{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:15rem}
+.ini-wide{grid-column:2/-1;min-width:0}
+@media (max-width:560px){.ini-act{max-width:none}.ini-wide{grid-column:1/-1}}
 .ini-act button{padding:3px 9px;font-size:.85rem}
 .ini-act button.step{padding:0;width:26px;height:26px}
 @media (max-width:560px){.ini-row{grid-template-columns:1rem 4rem minmax(0,1fr);gap:6px 12px}.ini-act{grid-column:2/-1;justify-content:flex-start}}
@@ -239,6 +241,22 @@ input.ini-in{width:100%;height:2.4rem;font-family:var(--display);font-size:1.15r
 .pk-roll input{width:auto;accent-color:var(--accent)}
 span.chip{border:1px solid var(--rule);display:inline-block}
 .ini-who .conds.wide{max-width:none}
+.best{display:grid;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.best-res{display:flex;flex-wrap:wrap;gap:6px}.best-res:empty{display:none}
+.best-res button{padding:3px 10px;font-size:.88rem}
+.best-res p{margin:0}
+.best-pick{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.best-pick button{padding:2px 8px;font-size:.82rem}
+.sb{margin-top:8px;border:1px solid var(--rule);border-top:3px solid var(--weak);border-radius:6px;padding:10px 12px;background:var(--bg);display:grid;gap:3px;font-size:.88rem;max-width:640px}
+.sb-h{display:grid;margin-bottom:4px}.sb-h b{font-family:var(--display);font-size:1.15rem;color:var(--weak)}
+.sb-ab{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;margin:6px 0;text-align:center;border-block:1px solid var(--rule);padding:6px 0}
+.sb-ab div{display:grid}.sb-ab .lbl{text-transform:uppercase}
+.sb h4{margin:8px 0 2px;font-family:var(--display);font-size:1rem;color:var(--weak);border-bottom:1px solid var(--rule)}
+.sb p{margin:2px 0;white-space:normal}
+.sb-rech{display:inline-flex;gap:4px;align-items:center;margin-left:4px;font-weight:700;color:var(--weak);font-size:.8rem}
+.sb-rech button{padding:1px 8px;font-size:.78rem}
+.sb-src{margin-top:6px!important}
+@media (max-width:520px){.sb-ab{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .sv-who{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;margin:0;display:grid;gap:8px}
 .sv-who legend{padding:0 4px}
 .sv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 14px}
@@ -357,7 +375,9 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   function fixParty(){state.party.forEach(function(p){if(!p.dragon)p.dragon=blankDragon();if(!Array.isArray(p.dragon.features))p.dragon.features=[];if(!Array.isArray(p.dragon.tactics))p.dragon.tactics=[];});
     // saved enemies ({key: {name,hp,ac,init,note,leg,lres}}) and saved encounters ([{id,name,foes:[…],lair}]) for the initiative tracker
     if(!state.foes||typeof state.foes!=='object'||Array.isArray(state.foes))state.foes={};
-    if(!Array.isArray(state.encs))state.encs=[];}
+    if(!Array.isArray(state.encs))state.encs=[];
+    // bestiary stat blocks (SRD 5.1) the tracker's enemies, saved enemies and encounters point at: {index: block}
+    if(!state.blocks||typeof state.blocks!=='object'||Array.isArray(state.blocks))state.blocks={};}
   fixParty();
 
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -1104,6 +1124,8 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   function upkeep(I,e){
     var p=hero(e), mine=p?[p.id,did(p)]:[];
     I.fx.forEach(function(f){if(f.total!=null&&!ended(f)&&f.total-(f.el||0)===1&&(f.who===e.id||fxTargets(I,f).some(function(h){return mine.indexOf(h)>=0})))note(I,e.id,f.name+': last round')});
+    // a monster's spent recharge abilities: roll at the start of its turn (open its stat block)
+    Object.keys(e.rech||{}).forEach(function(k){if(e.rech[k])note(I,e.id,'roll to recharge '+k)});
   }
   function roundsTxt(r){return r+' round'+(r===1?'':'s')+(r>=10?' (≈'+(Math.round(r*6/60*10)/10)+' min)':'')}
   // Tell the riders' sheets the round and whose turn it is (js/turn.js). turn, next, held and callFor are entry ids, only for
@@ -1213,6 +1235,8 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     if(r)act+='<button class="step" data-iup="'+e.id+'"'+(ri<=0?' disabled':'')+' aria-label="Move '+esc(eName(e))+' up" title="Move up">↑</button><button class="step" data-idown="'+e.id+'"'+(ri>=rl.length-1?' disabled':'')+' aria-label="Move '+esc(eName(e))+' down" title="Move down">↓</button>';
     if(isCur&&I.list.filter(inTurn).length>1)act+='<button data-ihold="'+e.id+'" title="Ready an action or wait: step out of the order until they act">Hold turn</button>';
     if(e.held)act+=(active?'<button class="primary" data-iact="'+e.id+'" title="Acts now, before '+esc(c?eName(c):'')+', and keeps this spot from now on">Act now</button>':'')+'<button class="ghost" data-iunhold="'+e.id+'">Back in place</button>';
+    var SB=!p&&e.sb&&state.blocks[e.sb];
+    if(SB){sub.splice(1,0,'<span class="st">CR <b>'+esc(SB.cr)+'</b></span>');act+='<button data-sbtog="'+e.id+'" aria-expanded="'+!!sbOpen[e.id]+'" title="Show its stat block (only you see it)">Stat block</button>'}
     var copen=!p&&!e.lair&&(condOpen[e.id]||condAsk[e.id]);
     if(!p&&!e.lair)act+='<button data-iconds="'+e.id+'" aria-expanded="'+!!copen+'" title="Put a condition on '+esc(e.name)+'">Conditions</button>';
     if(!p)act+='<button class="ghost" data-idel="'+e.id+'" aria-label="Remove '+esc(eName(e))+'">Remove</button>';
@@ -1232,13 +1256,120 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       '<div class="ini-who">'+(p?'<span class="name">'+esc(eName(e))+'</span>':
         '<div class="dmin"><input class="ini-name" data-iname="'+e.id+'" value="'+esc(e.name)+'" aria-label="Enemy name"><input data-inote="'+e.id+'" value="'+esc(e.note||'')+'" placeholder="Notes: resistances, tactics…" aria-label="'+esc(e.name)+' notes"></div>')+
       '<div class="ini-sub">'+sub.join('')+'</div>'+who2+mhp+'</div>'+
-      '<div class="ini-act">'+act+'</div></li>';
+      '<div class="ini-act">'+act+'</div>'+(SB&&sbOpen[e.id]?'<div class="ini-wide">'+statBlockHtml(SB,e)+'</div>':'')+'</li>';
+  }
+  // ---------- Bestiary: the 2014 SRD 5.1 monsters, looked up from the free D&D 5e API (dnd5eapi.co) ----------
+  // A chosen monster's stat block is trimmed down and kept in state.blocks, so saved enemies and encounters work offline.
+  var BEST='https://www.dnd5eapi.co', bestIx=null, bestBusy='', sbOpen={};
+  function bestIndex(){
+    if(bestIx)return Promise.resolve(bestIx);
+    try{var c=JSON.parse(localStorage.getItem('arcanum-bestiary-ix')||'null');if(c&&c.at>Date.now()-30*864e5&&Array.isArray(c.list)){bestIx=c.list;return Promise.resolve(bestIx)}}catch(e){}
+    return fetch(BEST+'/api/2014/monsters').then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
+      bestIx=(d.results||[]).map(function(m){return [m.index,m.name]});
+      try{localStorage.setItem('arcanum-bestiary-ix',JSON.stringify({at:Date.now(),list:bestIx}))}catch(e){}
+      return bestIx;
+    });
+  }
+  function crTxt(cr){return cr===0.125?'1/8':cr===0.25?'1/4':cr===0.5?'1/2':String(cr)}
+  function usageTxt(u){
+    if(!u)return null;
+    if(u.type==='recharge on roll')return {t:'Recharge '+(u.min_value>=6?'6':u.min_value+'–6'),min:u.min_value||6};
+    if(u.type==='per day')return {t:u.times+'/Day'};
+    if(u.type==='recharge after rest')return {t:'Recharges after a '+((u.rest_types||[]).join(' or ')||'rest')};
+    return null;
+  }
+  // the API's monster → a small stat block: {i, n, meta, ac, hp, hd, spd, ab:[6], saves, skills, vul, res, imm, cimm, senses, lang, cr, xp, tr, act, la, re}
+  function compactBlock(m){
+    function list(a){return (a||[]).map(function(x){return typeof x==='string'?x:x.name||x.index}).join(', ')}
+    function feats(a){return (a||[]).map(function(x){var u=usageTxt(x.usage);var o={n:x.name,d:x.desc||''};if(u){o.u=u.t;if(u.min)o.min=u.min}return o})}
+    var pr=m.proficiencies||[];
+    function pick(re){return pr.filter(function(p){return re.test(p.proficiency.index)}).map(function(p){return p.proficiency.name.replace(/^(Saving Throw|Skill): /,'')+' '+(p.value>=0?'+':'')+p.value}).join(', ')}
+    var ac=(m.armor_class||[]).map(function(a){return a.value+(a.type&&a.type!=='dex'?' ('+(a.armor?list(a.armor):a.type)+')':'')}).join(', ');
+    var spd=Object.keys(m.speed||{}).map(function(k){var v=m.speed[k];return k==='walk'?v:k==='hover'?(v?'hover':''):k+' '+v}).filter(Boolean).join(', ');
+    var sen=Object.keys(m.senses||{}).map(function(k){return k==='passive_perception'?'passive Perception '+m.senses[k]:k.replace(/_/g,' ')+' '+m.senses[k]}).join(', ');
+    return {i:m.index,n:m.name,meta:[m.size,m.type+(m.subtype?' ('+m.subtype+')':''),m.alignment].filter(Boolean).join(', '),ac:ac,hp:m.hit_points,hd:m.hit_points_roll||m.hit_dice||'',spd:spd,
+      ab:[m.strength,m.dexterity,m.constitution,m.intelligence,m.wisdom,m.charisma],saves:pick(/^saving-throw/),skills:pick(/^skill/),
+      vul:list(m.damage_vulnerabilities),res:list(m.damage_resistances),imm:list(m.damage_immunities),cimm:list(m.condition_immunities),
+      senses:sen,lang:m.languages||'—',cr:crTxt(m.challenge_rating),xp:m.xp,pb:m.proficiency_bonus,
+      tr:feats(m.special_abilities),act:feats(m.actions),la:feats(m.legendary_actions),re:feats(m.reactions)};
+  }
+  function bestFetch(ix){
+    if(state.blocks[ix])return Promise.resolve(state.blocks[ix]);
+    return fetch(BEST+'/api/2014/monsters/'+encodeURIComponent(ix)).then(function(r){if(!r.ok)throw 0;return r.json()}).then(compactBlock);
+  }
+  // fill the Add enemies form from a stat block
+  function fillFromBlock(B){
+    var leg=B.la&&B.la.length?'3':'', lr=(B.tr||[]).find(function(t){return /^legendary resistance/i.test(t.n)}), lres=lr?((/(\d+)\s*\/\s*day/i.exec(lr.n+' '+(lr.u||''))||[])[1]||'3'):'';
+    var defs=[B.vul&&'Vulnerable: '+B.vul,B.res&&'Resist: '+B.res,B.imm&&'Immune: '+B.imm].filter(Boolean).join('. ');
+    var dm=Math.floor(((+B.ab[1]||10)-10)/2);
+    addForm={name:B.n,count:addForm.count||'1',hp:String(B.hp),ac:String(parseInt(B.ac,10)||''),init:(dm>=0?'+':'')+dm,note:defs,leg:leg,lres:lres,roll:addForm.roll,sb:B.i};
+  }
+  function bestMatches(q){
+    q=foeKey(q); if(!q||!bestIx)return [];
+    var a=bestIx.filter(function(m){return m[1].toLowerCase().indexOf(q)===0}), b=bestIx.filter(function(m){var x=m[1].toLowerCase();return x.indexOf(q)>0});
+    return a.concat(b).slice(0,12);
+  }
+  function bestResHtml(q){
+    if(!q)return '';
+    if(!bestIx)return '<p class="minor">'+(bestBusy==='ix'?'Loading the bestiary…':'The bestiary needs the internet connection.')+'</p>';
+    var ms=bestMatches(q);
+    return ms.length?ms.map(function(m){return '<button data-best="'+esc(m[0])+'">'+esc(m[1])+'</button>'}).join(''):'<p class="minor">No SRD monster by that name. Monster Manual creatures outside the SRD can be typed in by hand below.</p>';
+  }
+  function mod2(s){var m=Math.floor(((+s||10)-10)/2);return (m>=0?'+':'')+m}
+  // The stat block on an enemy's row: only the DM's party sheet shows it.
+  function statBlockHtml(B,e){
+    function line(l,v){return v?'<div><b>'+l+'</b> '+esc(v)+'</div>':''}
+    function feat(f,kind){
+      var rk=e&&f.min?f.n:'', spent=rk&&(e.rech||{})[rk];
+      return '<p><b><i>'+esc(f.n)+(f.u?' ('+esc(f.u)+')':'')+'.</i></b> '+esc(f.d)+
+        (rk?' <span class="sb-rech'+(spent?' spent':'')+'">'+(spent?'Spent <button data-rech="'+e.id+'" data-n="'+esc(rk)+'" data-min="'+f.min+'">Roll d6 to recharge</button><button class="ghost" data-rechset="'+e.id+'" data-n="'+esc(rk)+'">Ready</button>':
+          '<button data-rechuse="'+e.id+'" data-n="'+esc(rk)+'">Mark used</button>')+'</span>':'')+'</p>';
+    }
+    function sect(t,a,intro){return a&&a.length?'<h4>'+t+'</h4>'+(intro?'<p class="minor">'+intro+'</p>':'')+a.map(feat).join(''):''}
+    return '<div class="sb">'+
+      '<div class="sb-h"><b>'+esc(B.n)+'</b><span class="minor">'+esc(B.meta)+'</span></div>'+
+      line('Armor Class',B.ac)+line('Hit Points',B.hp+(B.hd?' ('+B.hd+')':''))+line('Speed',B.spd)+
+      '<div class="sb-ab">'+AB.map(function(a,i){return '<div><span class="lbl">'+a+'</span><b>'+B.ab[i]+'</b> <span class="minor">('+mod2(B.ab[i])+')</span></div>'}).join('')+'</div>'+
+      line('Saving Throws',B.saves)+line('Skills',B.skills)+line('Damage Vulnerabilities',B.vul)+line('Damage Resistances',B.res)+line('Damage Immunities',B.imm)+
+      line('Condition Immunities',B.cimm)+line('Senses',B.senses)+line('Languages',B.lang)+line('Challenge',B.cr+' ('+(B.xp||0)+' XP)'+(B.pb?' · Proficiency +'+B.pb:''))+
+      sect('Traits',B.tr)+sect('Actions',B.act)+sect('Reactions',B.re)+sect('Legendary Actions',B.la,'Can take 3 legendary actions, one at a time at the end of another creature’s turn. Spent ones come back at the start of its turn.')+
+      '<p class="minor sb-src">SRD 5.1 · CC-BY-4.0 Wizards of the Coast</p></div>';
+  }
+  function pickBest(ix){
+    readAddForm();bestBusy=ix;render();
+    bestFetch(ix).then(function(B){
+      state.blocks[B.i]=B;pruneBlocks();saveState();
+      fillFromBlock(B);bestBusy='';statusMsg='';render();var c=document.getElementById('ad-count');if(c){c.focus();c.select()}
+    },function(){bestBusy='';statusMsg='Couldn’t reach the bestiary. Check the internet connection, or type the monster in by hand.';render()});
+  }
+  // keep only stat blocks something still uses (the tracker, a saved enemy or a saved encounter), once there are many
+  function pruneBlocks(){
+    var keys=Object.keys(state.blocks); if(keys.length<=40)return;
+    var used={};ini().list.forEach(function(e){if(e.sb)used[e.sb]=1});
+    Object.keys(state.foes).forEach(function(k){if(state.foes[k].sb)used[state.foes[k].sb]=1});
+    state.encs.forEach(function(en){en.foes.forEach(function(f){if(f.sb)used[f.sb]=1})});
+    if(addForm.sb)used[addForm.sb]=1;
+    keys.forEach(function(k){if(!used[k])delete state.blocks[k]});
+  }
+  function bestSearch(q){
+    addForm.q=q;
+    var box=document.getElementById('ad-best-res');
+    function show(){var b=document.getElementById('ad-best-res');if(b)b.innerHTML=bestResHtml(addForm.q)}
+    if(!bestIx&&bestBusy!=='ix'){bestBusy='ix';bestIndex().then(function(){bestBusy='';show()},function(){bestBusy='';show()})}
+    if(box)box.innerHTML=bestResHtml(q);
   }
   function foeKey(name){return String(name||'').trim().toLowerCase()}
   function foeList(){return Object.keys(state.foes).sort().map(function(k){return state.foes[k]})}
   function addView(){
     var f=addForm, saved=foeList();
+    var B=f.sb&&state.blocks[f.sb];
     return '<section class="pick" aria-labelledby="ad-h"><div class="pk-head"><h2 id="ad-h">Add enemies</h2><button class="ghost" id="ad-close">Close</button></div>'+
+      '<div class="best"><label class="stack"><span class="lbl">From the bestiary (2014 SRD)</span><input id="ad-best" value="'+esc(f.q||'')+'" placeholder="Search monsters: goblin, owlbear, young red dragon…" autocomplete="off" aria-controls="ad-best-res"></label>'+
+        '<div id="ad-best-res" class="best-res" aria-live="polite">'+bestResHtml(f.q)+'</div>'+
+        (B?'<div class="best-pick">📖 <b>'+esc(B.n)+'</b> <span class="minor">CR '+esc(B.cr)+' · AC '+esc(B.ac)+' · HP '+B.hp+(B.hd?' ('+esc(B.hd)+')':'')+'</span>'+
+          (B.hd&&/d/.test(B.hd)?'<button data-besthp="'+esc(B.hd)+'" title="Roll HP for each one instead of the average">Roll HP ('+esc(B.hd)+')</button>':'')+
+          '<button class="ghost" id="best-clear" title="Stop using this stat block">✕</button></div>':'')+
+        (bestBusy&&bestBusy!=='ix'?'<p class="minor">Looking it up…</p>':'')+'</div>'+
       '<div class="pk-row"><label class="stack" style="flex:2;min-width:10em"><span class="lbl">Name</span><input id="ad-name" list="foe-names" value="'+esc(f.name||'')+'" placeholder="Goblin" autocomplete="off"></label>'+
       '<datalist id="foe-names">'+saved.map(function(t){return '<option value="'+esc(t.name)+'">'}).join('')+'</datalist>'+
       '<label class="stack"><span class="lbl">How many</span><input class="n" id="ad-count" inputmode="numeric" value="'+esc(f.count||'1')+'"></label>'+
@@ -1259,7 +1390,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     var g=[], by={};
     I.list.forEach(function(e){
       if(hero(e)||e.lair)return; var b=e.base||e.name||'Enemy', k=foeKey(b);
-      if(!by[k]){by[k]={name:b,count:0,hp:e.hpF!=null?e.hpF:e.hpMax!=null?String(e.hpMax):'',ac:(e.s&&e.s.ac)||'',init:(e.s&&e.s.init)||'',note:e.note||'',leg:e.leg?String(e.leg.max):'',lres:e.lres?String(e.lres.max):''};g.push(by[k])}
+      if(!by[k]){by[k]={name:b,count:0,hp:e.hpF!=null?e.hpF:e.hpMax!=null?String(e.hpMax):'',ac:(e.s&&e.s.ac)||'',init:(e.s&&e.s.init)||'',note:e.note||'',leg:e.leg?String(e.leg.max):'',lres:e.lres?String(e.lres.max):'',sb:e.sb||''};g.push(by[k])}
       by[k].count++;
     });
     return g;
@@ -1475,12 +1606,12 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   // Every named enemy added is kept as a saved enemy, so its numbers fill in next time.
   function rememberFoe(f){
     var nm=String(f.name||'').trim(); if(!nm||nm.toLowerCase()==='enemy')return;
-    state.foes[foeKey(nm)]={name:nm,hp:String(f.hp||'').trim(),ac:String(f.ac||'').trim(),init:String(f.init||'').trim(),note:String(f.note||'').trim(),leg:String(f.leg||'').trim(),lres:String(f.lres||'').trim()};
+    state.foes[foeKey(nm)]={name:nm,hp:String(f.hp||'').trim(),ac:String(f.ac||'').trim(),init:String(f.init||'').trim(),note:String(f.note||'').trim(),leg:String(f.leg||'').trim(),lres:String(f.lres||'').trim(),sb:f.sb||''};
     saveState();
   }
   function fillFromFoe(k){
     var t=state.foes[k]; if(!t)return false;
-    addForm={name:t.name,count:addForm.count||'1',hp:t.hp,ac:t.ac,init:t.init,note:t.note,leg:t.leg,lres:t.lres,roll:addForm.roll};return true;
+    addForm={name:t.name,count:addForm.count||'1',hp:t.hp,ac:t.ac,init:t.init,note:t.note,leg:t.leg,lres:t.lres,roll:addForm.roll,sb:t.sb||''};return true;
   }
   // Put a group of enemies ({name,count,hp,ac,init,note,leg,lres}) in the tracker; returns the initiative rolls made.
   function putEnemies(f,roll){
@@ -1492,6 +1623,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       var hp=hpRoll(f.hp), id='dm-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
       var e={id:id,name:many?base+' '+(same+i+1):base,base:base,init:'',tb:0,note:String(f.note||'').trim(),s:{ac:String(f.ac||'').trim(),init:String(f.init||'').trim()}};
       if(hp!=null){e.hp=hp;e.hpMax=hp;e.hpF=String(f.hp).trim()}
+      if(f.sb&&state.blocks[f.sb])e.sb=f.sb;
       if(leg)e.leg={max:leg,used:0};
       if(lres)e.lres={max:lres,used:0};
       var md=initMod(e); e.tb=md==null?0:md;
@@ -1689,7 +1821,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='lvlback-yes'){ask='';takeBack(state.party.filter(function(p){return granted(p.id)}).map(function(p){return p.id}));render();var lb3=document.getElementById('lvl-btn');if(lb3)lb3.focus();return}
     else if(ds.lvlback){takeBack([ds.lvlback]);render();return}
     else if(t.id==='ask-no'){ask='';render();}
-    else if(t.id==='restore-yes'){var kf=state.foes,ke=state.encs;state=JSON.parse(DEFAULTS);state.foes=kf;state.encs=ke;fixParty();ask='';dirty=true;render();}
+    else if(t.id==='restore-yes'){var kf=state.foes,ke=state.encs,kb=state.blocks;state=JSON.parse(DEFAULTS);state.foes=kf;state.encs=ke;state.blocks=kb;fixParty();ask='';dirty=true;render();}
     else if(t.id==='short-btn'){shortRest();savePlay();statusMsg='Short rest: tandem uses, short-rest abilities and breath weapons restored. Spend Hit Dice to heal.'+shortLive();render();}
     else if(t.id==='short-x'){shortCall=null;render();var sb2=document.getElementById('short-btn');if(sb2)sb2.focus();return}
     else if(t.id==='long-yes'){longRest();savePlay();ask='';statusMsg='Long rest: HP and abilities restored, temp HP cleared, 1 exhaustion level removed.';restLive();render();}
@@ -1784,6 +1916,17 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='ini-add'){adding=!adding;render();var af=document.getElementById(adding?'ad-name':'ini-add');if(af)af.focus();return}
     else if(t.id==='ad-close'){adding=false;render();var ib=document.getElementById('ini-add');if(ib)ib.focus();return}
     else if(t.id==='ad-go'){readAddForm();addEnemies();render();var an=document.getElementById('ad-name');if(an)an.focus();return}
+    else if(ds.best){pickBest(ds.best);return}
+    else if(ds.besthp){readAddForm();addForm.hp=ds.besthp;render();var hh=document.getElementById('ad-hp');if(hh)hh.focus();return}
+    else if(t.id==='best-clear'){readAddForm();addForm.sb='';render();var bb=document.getElementById('ad-best');if(bb)bb.focus();return}
+    else if(ds.sbtog){sbOpen[ds.sbtog]=!sbOpen[ds.sbtog];render();var st2=document.querySelector('[data-sbtog="'+ds.sbtog+'"]');if(st2)st2.focus();return}
+    else if(ds.rechuse||ds.rech||ds.rechset){
+      I=ini();var re=entry(I,ds.rechuse||ds.rech||ds.rechset);if(!re)return;re.rech=re.rech||{};
+      if(ds.rechuse){re.rech[ds.n]=true;statusMsg=re.name+': '+ds.n+' used.'}
+      else if(ds.rechset){delete re.rech[ds.n];statusMsg=re.name+': '+ds.n+' ready.'}
+      else{var d6=1+Math.floor(Math.random()*6),okr=d6>=+ds.min;if(okr)delete re.rech[ds.n];statusMsg=re.name+': rolled '+d6+' for '+ds.n+(okr?', recharged!':', not yet.')}
+      savePlay();render();var rb=document.querySelector('[data-sbtog="'+re.id+'"]');if(rb)rb.focus();return;
+    }
     else if(ds.foe){readAddForm();fillFromFoe(ds.foe);render();var ac2=document.getElementById('ad-count');if(ac2){ac2.focus();ac2.select()}return}
     else if(ds.foedel){var fg=state.foes[ds.foedel];delete state.foes[ds.foedel];saveState();readAddForm();statusMsg=fg?'Forgot '+fg.name+'.':'';render();var an2=document.getElementById('ad-name');if(an2)an2.focus();return}
     else if(ds.iconds){condOpen[ds.iconds]=!condOpen[ds.iconds];if(!condOpen[ds.iconds])delete condAsk[ds.iconds];render();var cb2=document.querySelector('[data-iconds="'+ds.iconds+'"]');if(cb2)cb2.focus();return}
@@ -1833,7 +1976,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   function readAddForm(){
     function v(id){var el=document.getElementById(id);return el?el.value:''}
     if(!document.getElementById('ad-name'))return;
-    addForm={name:v('ad-name'),count:v('ad-count'),hp:v('ad-hp'),ac:v('ad-ac'),init:v('ad-init'),note:v('ad-note'),leg:v('ad-leg'),lres:v('ad-lres'),roll:!!(document.getElementById('ad-roll')||{}).checked};
+    addForm={name:v('ad-name'),count:v('ad-count'),hp:v('ad-hp'),ac:v('ad-ac'),init:v('ad-init'),note:v('ad-note'),leg:v('ad-leg'),lres:v('ad-lres'),roll:!!(document.getElementById('ad-roll')||{}).checked,sb:addForm.sb||'',q:v('ad-best')};
   }
   document.addEventListener('keydown',function(e){
     var el=e.target, ds=el.dataset||{};
@@ -1849,6 +1992,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     }
     else if(ds.idmg){e.preventDefault();enemyHp(ds.idmg,-1);var db2=document.querySelector('[data-idmg="'+ds.idmg+'"]');if(db2)db2.focus();}
     else if(el.id==='fx-name'||el.id==='fx-dur'){e.preventDefault();var fb=document.getElementById('fx-add');if(fb)fb.click();}
+    else if(el.id==='ad-best'){e.preventDefault();var fb2=document.querySelector('#ad-best-res [data-best]');if(fb2)fb2.click();}
     else if(/^ad-/.test(el.id)&&el.id!=='ad-roll'){e.preventDefault();var gb=document.getElementById('ad-go');if(gb)gb.click();}
     else if(el.id==='enc-name'){e.preventDefault();var sb=document.getElementById('enc-save');if(sb)sb.click();}
     // Enter in a save total moves to the next one
@@ -1861,6 +2005,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     if(el.id==='fx-name'){fxForm.name=el.value;return}
     if(el.id==='fx-dur'){fxForm.dur=el.value;return}
     if(el.id==='enc-name'){encForm.name=el.value;return}
+    if(el.id==='ad-best'){bestSearch(el.value);return}
     var p=ds.id&&byId(ds.id); if(!p)return;
     if(ds.k){p[ds.k]=el.value;dirty=true;}
     else if(ds.dk&&el.tagName!=='SELECT'){p.dragon[ds.dk]=el.value;dirty=true;if(ds.dk==='color'){var td=el.closest('td');if(td)td.style.setProperty('--gem',el.value);}}
@@ -1899,7 +2044,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   }
 
   // ---------- Backup ----------
-  function backupJson(){return JSON.stringify({sheet:'arcanum-dragon-riders',version:1,updated:state.updated,party:state.party,foes:state.foes,encs:state.encs,play:play},null,2)}
+  function backupJson(){return JSON.stringify({sheet:'arcanum-dragon-riders',version:1,updated:state.updated,party:state.party,foes:state.foes,encs:state.encs,blocks:state.blocks,play:play},null,2)}
   function dialog(id,title,body){
     var d=document.getElementById(id);
     if(!d){d=document.createElement('dialog');d.id=id;d.setAttribute('aria-labelledby',id+'-t');document.body.appendChild(d);}
@@ -1935,7 +2080,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   function importText(txt){
     var st=document.getElementById('import-status');
     try{var d=JSON.parse(txt);if(!d||!Array.isArray(d.party))throw 0;
-      state={updated:d.updated||new Date().toISOString().slice(0,10),party:d.party,foes:d.foes,encs:d.encs};fixParty();
+      state={updated:d.updated||new Date().toISOString().slice(0,10),party:d.party,foes:d.foes,encs:d.encs,blocks:d.blocks};fixParty();
       play=d.play&&typeof d.play==='object'?d.play:{};normPlay();logs={};rolls={};
       saveState();savePlay();statusMsg='Backup imported';
       var dl=document.getElementById('import-dlg');if(dl)dl.close();render();
