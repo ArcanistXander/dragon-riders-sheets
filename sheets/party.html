@@ -255,7 +255,19 @@ span.chip{border:1px solid var(--rule);display:inline-block}
 .sb p{margin:2px 0;white-space:normal}
 .sb-rech{display:inline-flex;gap:4px;align-items:center;margin-left:4px;font-weight:700;color:var(--weak);font-size:.8rem}
 .sb-rech button{padding:1px 8px;font-size:.78rem}
-.sb-src{margin-top:6px!important}
+.sb-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-top:6px}
+.sb-foot button{padding:2px 10px;font-size:.82rem}
+.best-res button.cust{border-color:var(--accent);color:var(--accent)}
+#cb-dlg{width:min(820px,calc(100vw - 32px))}
+#cb-dlg .stack{display:grid;gap:2px}
+.cb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:8px}
+.cb-grid .w2{grid-column:span 2}
+@media (max-width:520px){.cb-grid .w2{grid-column:auto}}
+.cb-ab{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-top:8px}.cb-ab input{width:100%}
+dialog textarea.cb-ta{min-height:80px;font-family:inherit;font-size:.9rem;width:100%;box-sizing:border-box}
+.cb-paste{border:1px dashed var(--accent);border-radius:6px;padding:8px 10px}
+.cb-paste summary{cursor:pointer;font-weight:700;color:var(--accent)}
+#cb-src{min-height:140px}
 @media (max-width:520px){.sb-ab{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .sv-who{border:1px solid var(--rule);border-radius:6px;padding:8px 10px;margin:0;display:grid;gap:8px}
 .sv-who legend{padding:0 4px}
@@ -1299,7 +1311,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   }
   // fill the Add enemies form from a stat block
   function fillFromBlock(B){
-    var leg=B.la&&B.la.length?'3':'', lr=(B.tr||[]).find(function(t){return /^legendary resistance/i.test(t.n)}), lres=lr?((/(\d+)\s*\/\s*day/i.exec(lr.n+' '+(lr.u||''))||[])[1]||'3'):'';
+    var leg=B.leg?String(B.leg):B.la&&B.la.length?'3':'', lr=(B.tr||[]).find(function(t){return /^legendary resistance/i.test(t.n)}), lres=lr?((/(\d+)\s*\/\s*day/i.exec(lr.n+' '+(lr.u||''))||[])[1]||'3'):'';
     var defs=[B.vul&&'Vulnerable: '+B.vul,B.res&&'Resist: '+B.res,B.imm&&'Immune: '+B.imm].filter(Boolean).join('. ');
     var dm=Math.floor(((+B.ab[1]||10)-10)/2);
     addForm={name:B.n,count:addForm.count||'1',hp:String(B.hp),ac:String(parseInt(B.ac,10)||''),init:(dm>=0?'+':'')+dm,note:defs,leg:leg,lres:lres,roll:addForm.roll,sb:B.i};
@@ -1311,9 +1323,11 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
   }
   function bestResHtml(q){
     if(!q)return '';
-    if(!bestIx)return '<p class="minor">'+(bestBusy==='ix'?'Loading the bestiary…':'The bestiary needs the internet connection.')+'</p>';
+    var qq=foeKey(q), mine=customList().filter(function(B){return B.n.toLowerCase().indexOf(qq)>=0}).slice(0,8);
+    var mh=mine.map(function(B){return '<button class="cust" data-best="'+esc(B.i)+'" title="Your stat block">★ '+esc(B.n)+'</button>'}).join('');
+    if(!bestIx)return mh+'<p class="minor">'+(bestBusy==='ix'?'Loading the bestiary…':'The official bestiary needs the internet connection.')+'</p>';
     var ms=bestMatches(q);
-    return ms.length?ms.map(function(m){return '<button data-best="'+esc(m[0])+'">'+esc(m[1])+'</button>'}).join(''):'<p class="minor">No SRD monster by that name. Monster Manual creatures outside the SRD can be typed in by hand below.</p>';
+    return mh+(ms.length?ms.map(function(m){return '<button data-best="'+esc(m[0])+'">'+esc(m[1])+'</button>'}).join(''):mine.length?'':'<p class="minor">No monster by that name. Make it with New stat block, or paste its stat block there.</p>');
   }
   function mod2(s){var m=Math.floor(((+s||10)-10)/2);return (m>=0?'+':'')+m}
   // The stat block on an enemy's row: only the DM's party sheet shows it.
@@ -1332,9 +1346,168 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       '<div class="sb-ab">'+AB.map(function(a,i){return '<div><span class="lbl">'+a+'</span><b>'+B.ab[i]+'</b> <span class="minor">('+mod2(B.ab[i])+')</span></div>'}).join('')+'</div>'+
       line('Saving Throws',B.saves)+line('Skills',B.skills)+line('Damage Vulnerabilities',B.vul)+line('Damage Resistances',B.res)+line('Damage Immunities',B.imm)+
       line('Condition Immunities',B.cimm)+line('Senses',B.senses)+line('Languages',B.lang)+line('Challenge',B.cr+' ('+(B.xp||0)+' XP)'+(B.pb?' · Proficiency +'+B.pb:''))+
-      sect('Traits',B.tr)+sect('Actions',B.act)+sect('Reactions',B.re)+sect('Legendary Actions',B.la,'Can take 3 legendary actions, one at a time at the end of another creature’s turn. Spent ones come back at the start of its turn.')+
-      '<p class="minor sb-src">SRD 5.1 · CC-BY-4.0 Wizards of the Coast</p></div>';
+      sect('Traits',B.tr)+sect('Actions',B.act)+sect('Bonus Actions',B.ba)+sect('Reactions',B.re)+sect('Legendary Actions',B.la,'Can take '+(B.leg||3)+' legendary actions, one at a time at the end of another creature’s turn. Spent ones come back at the start of its turn.')+
+      '<div class="sb-foot">'+(e?'<button data-sbedit="'+e.id+'">Edit stat block</button>':'')+'<span class="minor">'+(B.custom?'Your stat block':'SRD 5.1 · CC-BY-4.0 Wizards of the Coast')+'</span></div></div>';
   }
+  // ---------- Custom stat blocks: typed in, or pasted as text from a PDF, D&D Beyond or Homebrewery, then checked ----------
+  // Kept in state.blocks under 'custom-<name>' (never pruned), with the same shape as the bestiary's, plus ba (bonus actions) and leg.
+  function blankBlock(){return {n:'',meta:'',ac:'',hp:0,hd:'',spd:'30 ft.',ab:[10,10,10,10,10,10],saves:'',skills:'',vul:'',res:'',imm:'',cimm:'',senses:'',lang:'',cr:'',xp:0,pb:0,tr:[],act:[],ba:[],re:[],la:[],leg:0}}
+  // "Fire Breath (Recharge 5–6)" → {n:'Fire Breath', u:'Recharge 5–6', min:5}
+  function entryName(raw){
+    var m=/^(.*?)\s*\(((?:recharge|recharges)[^)]*|\d+\s*\/\s*day[^)]*)\)\s*$/i.exec(String(raw).trim()), o={n:String(raw).trim()};
+    if(m){o.n=m[1];o.u=m[2].replace(/-/g,'–');var r=/recharge\s+(\d)/i.exec(m[2]);if(r)o.min=+r[1]}
+    return o;
+  }
+  // a line that starts an entry: "Nimble Escape. The goblin…", with a Title Case name (so a wrapped sentence isn't mistaken for one)
+  function entryStart(L){
+    var m=/^([A-Z0-9][^.:]{0,70}?)\.\s+(.+)$/.exec(L); if(!m)return null;
+    var name=m[1].replace(/\([^)]*\)/g,' ').trim(), words=name.split(/\s+/).filter(Boolean);
+    if(!words.length||words.length>8)return null;
+    if(!words.every(function(w){return /^[A-Z0-9'’(]/.test(w)||/^(of|the|and|a|an|to|in|on|with|or|for|per|from|at|by)$/i.test(w)}))return null;
+    var o=entryName(m[1]);o.d=m[2];return o;
+  }
+  function parseBlock(txt){
+    var lines=String(txt||'').replace(/\r/g,'').replace(/[−–]/g,'-').split('\n').map(function(l){return l.replace(/\s+/g,' ').trim()}).filter(Boolean);
+    var B=blankBlock(), mode='head', lastField='', last=null, abN=0, abMode=false;
+    var LBL=[[/^(armor class|ac)\b[:.]?\s*/i,'ac'],[/^(hit points|hp)\b[:.]?\s*/i,'hp'],[/^speed\b[:.]?\s*/i,'spd'],[/^(saving throws?|saves)\b[:.]?\s*/i,'saves'],[/^skills?\b[:.]?\s*/i,'skills'],
+      [/^damage vulnerabilit(y|ies)\b[:.]?\s*/i,'vul'],[/^damage resistances?\b[:.]?\s*/i,'res'],[/^damage immunit(y|ies)\b[:.]?\s*/i,'imm'],[/^condition immunit(y|ies)\b[:.]?\s*/i,'cimm'],
+      [/^senses\b[:.]?\s*/i,'senses'],[/^languages?\b[:.]?\s*/i,'lang'],[/^(challenge|cr)\b[:.]?\s*/i,'cr'],[/^(proficiency bonus|pb)\b[:.]?\s*/i,'pb']];
+    var SEC=[[/^(special )?traits:?$/i,'tr'],[/^actions:?$/i,'act'],[/^bonus actions:?$/i,'ba'],[/^reactions:?$/i,'re'],[/^legendary actions:?$/i,'la']];
+    var F={};
+    var ABRE=/^(?:(?:str|dex|con|int|wis|cha)\b|\d{1,2}\s*\(\s*[+-]?\s*\d+\s*\)|[\s|])+$/i;
+    lines.forEach(function(L,i){
+      if(i===0&&!LBL.some(function(x){return x[0].test(L)})){B.n=L;return}
+      if(!B.meta&&mode==='head'&&/^(tiny|small|medium|large|huge|gargantuan)\b/i.test(L)){B.meta=L;return}
+      var sec=SEC.find(function(x){return x[0].test(L)}); if(sec){mode=sec[1];last=null;lastField='';return}
+      // ability scores: "STR DEX CON…" then "8 (-1) 14 (+2)…", one per line, or "STR 8 (-1)"
+      if(abN<6&&(abMode||/^(str|dex|con|int|wis|cha)\b/i.test(L))&&(ABRE.test(L)||/^(str|dex|con|int|wis|cha)\s*:?\s*\d/i.test(L))){
+        abMode=true;
+        var pairs=L.match(/(str|dex|con|int|wis|cha)\s*:?\s*(\d{1,2})\b/gi);
+        if(pairs&&!/\(\s*[+-]?\s*\d+\s*\)/.test(L.replace(/(str|dex|con|int|wis|cha)\s*:?\s*\d{1,2}\s*\(/gi,'')))pairs.forEach(function(p){var mm=/(str|dex|con|int|wis|cha)\s*:?\s*(\d{1,2})/i.exec(p);B.ab[AB.indexOf(mm[1].toLowerCase())]=+mm[2];abN++});
+        else (L.match(/\d{1,2}(?=\s*\(\s*[+-]?\s*\d+\s*\))/g)||[]).forEach(function(v){if(abN<6)B.ab[abN++]=+v});
+        if(abN>=6)abMode=false;
+        lastField='';return;
+      }
+      abMode=false;
+      if(mode==='head'){
+        var lb=LBL.find(function(x){return x[0].test(L)});
+        if(lb){F[lb[1]]=L.replace(lb[0],'');lastField=lb[1];return}
+        var e0=entryStart(L); if(e0&&abN>=6||e0&&lastField==='cr'||e0&&lastField==='pb'){mode='tr';B.tr.push(e0);last=e0;lastField='';return}
+        if(lastField){F[lastField]+=' '+L;return}
+        if(!B.meta)B.meta=L;
+        return;
+      }
+      var e1=entryStart(L);
+      if(mode==='la'&&!B.la.length&&!e1){var lc=/(\d+)\s+legendary actions/i.exec(L);if(lc)B.leg=+lc[1];return}
+      if(e1){B[mode].push(e1);last=e1;return}
+      if(last)last.d+=' '+L;
+    });
+    B.ac=(F.ac||'').trim();
+    var hp=/(\d+)\s*(?:\(([^)]*)\))?/.exec(F.hp||''); if(hp){B.hp=+hp[1];B.hd=(hp[2]||'').replace(/\s+/g,'')}
+    B.spd=(F.spd||B.spd).trim();
+    ['saves','skills','vul','res','imm','cimm','senses','lang'].forEach(function(k){if(F[k])B[k]=F[k].trim()});
+    var cr=/([\d\/]+)\s*(?:\(\s*([\d,]+)\s*xp)?/i.exec(F.cr||''); if(cr){B.cr=cr[1];if(cr[2])B.xp=+cr[2].replace(/,/g,'')}
+    var pbm=/(\d+)/.exec(F.pb||''); if(pbm)B.pb=+pbm[1];
+    if(B.la.length&&!B.leg)B.leg=3;
+    return B;
+  }
+  function entriesText(a){return (a||[]).map(function(f){return f.n+(f.u?' ('+f.u+')':'')+'. '+f.d}).join('\n\n')}
+  function entriesFrom(t){
+    return String(t||'').split(/\n\s*\n/).map(function(p){return p.replace(/\s*\n\s*/g,' ').trim()}).filter(Boolean).map(function(p){
+      var m=/^(.+?)\.\s+([\s\S]*)$/.exec(p); if(!m||m[1].length>80)return {n:p,d:''};
+      var o=entryName(m[1]);o.d=m[2];return o;
+    });
+  }
+  // the block from a backup file, an import, or the editor, made safe to use
+  function normBlock(b){
+    var B=blankBlock(); if(!b||typeof b!=='object')return null;
+    Object.keys(B).forEach(function(k){if(b[k]!=null)B[k]=b[k]});
+    ['n','meta','ac','hd','spd','saves','skills','vul','res','imm','cimm','senses','lang','cr'].forEach(function(k){B[k]=String(B[k]||'')});
+    B.n=B.n.trim(); if(!B.n)return null;
+    B.ab=AB.map(function(a,i){var v=parseInt((b.ab||[])[i],10);return isNaN(v)?10:v});
+    B.hp=parseInt(B.hp,10)||0;B.xp=parseInt(B.xp,10)||0;B.pb=parseInt(B.pb,10)||0;B.leg=parseInt(B.leg,10)||0;
+    ['tr','act','ba','re','la'].forEach(function(k){B[k]=(Array.isArray(b[k])?b[k]:[]).filter(function(f){return f&&f.n}).map(function(f){var o={n:String(f.n),d:String(f.d||'')};if(f.u)o.u=String(f.u);if(f.min)o.min=+f.min;return o})});
+    return B;
+  }
+  function customKey(name,keep){
+    var base='custom-'+(foeKey(name).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'monster');
+    if(keep&&/^custom-/.test(keep))return keep;
+    return base;
+  }
+  // The editor dialog. from: 'add' (fills the Add enemies form after saving) or an enemy id on the tracker.
+  var cbEdit={key:'',from:'add'}, cbAsk='';
+  function openBlockEditor(key,from,pre){
+    var B=pre||(key&&state.blocks[key])||blankBlock(); cbEdit={key:key||'',from:from||'add'};
+    function fi(id,lbl,v,cls,ph){return '<label class="stack'+(cls?' '+cls:'')+'"><span class="lbl">'+lbl+'</span><input id="cb-'+id+'" value="'+esc(v)+'" placeholder="'+esc(ph||'')+'" autocomplete="off"></label>'}
+    function ta(id,lbl,a,ph){return '<label class="stack"><span class="lbl">'+lbl+'</span><textarea class="cb-ta" id="cb-'+id+'" placeholder="'+esc(ph)+'">'+esc(entriesText(a))+'</textarea></label>'}
+    dialog('cb-dlg',key&&!/^custom-/.test(key)?'Edit stat block (saves as your own copy)':key?'Edit stat block':'New stat block',
+      '<details class="cb-paste"'+(pre||key?'':' open')+'><summary>Paste a stat block</summary><p class="minor" style="margin:4px 0">Copy one from a PDF, D&amp;D Beyond, Homebrewery or a document and paste it here. The fields below fill in, ready to check.</p>'+
+        '<textarea id="cb-src" class="cb-ta" placeholder="Goblin Boss&#10;Small humanoid (goblinoid), neutral evil&#10;Armor Class 17 (chain shirt, shield)&#10;Hit Points 21 (6d6)&#10;…"></textarea>'+
+        '<div class="dlg-actions"><button class="primary" id="cb-parse">Fill in from this text</button><span class="status" id="cb-pstatus"></span></div></details>'+
+      '<div class="cb-grid">'+fi('n','Name',B.n,'w2','Goblin Boss')+fi('meta','Size, type, alignment',B.meta,'w2','Small humanoid (goblinoid), neutral evil')+
+        fi('ac','Armor Class',B.ac,'','17 (chain shirt, shield)')+fi('hp','Hit Points (average)',B.hp||'','','21')+fi('hd','Hit dice',B.hd,'','6d6')+fi('spd','Speed',B.spd,'','30 ft.')+'</div>'+
+      '<div class="cb-ab">'+AB.map(function(a,i){return '<label class="stack"><span class="lbl">'+a+'</span><input class="n" id="cb-ab-'+a+'" inputmode="numeric" value="'+esc(B.ab[i])+'"></label>'}).join('')+'</div>'+
+      '<div class="cb-grid">'+fi('saves','Saving throws',B.saves,'w2','Dex +4, Wis +2')+fi('skills','Skills',B.skills,'w2','Stealth +6')+fi('vul','Vulnerabilities',B.vul,'','')+fi('res','Resistances',B.res,'','')+fi('imm','Damage immunities',B.imm,'','')+fi('cimm','Condition immunities',B.cimm,'','')+
+        fi('senses','Senses',B.senses,'w2','darkvision 60 ft., passive Perception 9')+fi('lang','Languages',B.lang,'','Common, Goblin')+fi('cr','Challenge',B.cr,'','1')+fi('xp','XP',B.xp||'','','200')+fi('pb','Proficiency bonus',B.pb||'','','2')+'</div>'+
+      '<p class="minor" style="margin:8px 0 4px">One entry per paragraph, written “Name. What it does.” Put a recharge or uses in brackets after the name: “Fire Breath (Recharge 5–6). …” or “Misty Step (2/Day). …”</p>'+
+      ta('tr','Traits',B.tr,'Nimble Escape. The goblin can take the Disengage or Hide action as a bonus action on each of its turns.')+
+      ta('act','Actions',B.act,'Scimitar. Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage.')+
+      ta('ba','Bonus actions',B.ba,'')+ta('re','Reactions',B.re,'Redirect Attack. When a creature the goblin can see targets it with an attack…')+
+      '<div class="cb-grid">'+fi('leg','Legendary actions per round',B.leg||'','','3')+'</div>'+ta('la','Legendary actions',B.la,'Tail Attack. The dragon makes a tail attack.')+
+      '<div class="dlg-actions"><button class="primary" id="cb-save">Save stat block</button><button data-close="1">Cancel</button><span class="status" id="cb-status"></span></div>');
+    var nf=document.getElementById(pre||key?'cb-n':'cb-src');if(nf)nf.focus();
+  }
+  function blockFromEditor(){
+    function v(id){var el=document.getElementById('cb-'+id);return el?el.value:''}
+    var B=blankBlock();
+    ['n','meta','ac','hd','spd','saves','skills','vul','res','imm','cimm','senses','lang','cr'].forEach(function(k){B[k]=v(k).trim()});
+    B.hp=parseInt(v('hp'),10)||0;B.xp=parseInt(String(v('xp')).replace(/,/g,''),10)||0;B.pb=parseInt(v('pb'),10)||0;B.leg=parseInt(v('leg'),10)||0;
+    B.ab=AB.map(function(a){var x=parseInt(v('ab-'+a),10);return isNaN(x)?10:x});
+    ['tr','act','ba','re','la'].forEach(function(k){B[k]=entriesFrom(v(k))});
+    if(B.la.length&&!B.leg)B.leg=3;
+    return normBlock(B);
+  }
+  function saveBlockEditor(){
+    var B=blockFromEditor(), st=document.getElementById('cb-status');
+    if(!B){st.textContent='Give it a name first.';var n0=document.getElementById('cb-n');if(n0)n0.focus();return}
+    var old=cbEdit.key, key=customKey(B.n,old); B.i=key; B.custom=true;
+    var replaced=!old&&state.blocks[key];
+    state.blocks[key]=B;
+    // a bestiary monster edited into your own copy: enemies already in the fight use the copy from now on
+    if(old&&old!==key)ini().list.forEach(function(e){if(e.sb===old)e.sb=key});
+    saveState();savePlay();
+    if(cbEdit.from==='add'){readAddForm();fillFromBlock(B);addForm.q=''}
+    statusMsg=(replaced?'Replaced your stat block ':'Saved stat block: ')+B.n+'.';
+    var dl=document.getElementById('cb-dlg');if(dl)dl.close();render();
+    var c=document.getElementById(cbEdit.from==='add'?'ad-count':'ini-add');if(c)c.focus();
+  }
+  function parseIntoEditor(){
+    var src=(document.getElementById('cb-src')||{}).value||'', B=parseBlock(src), ps=document.getElementById('cb-pstatus');
+    if(!B.n){ps.textContent='Paste a stat block first.';return}
+    var key=cbEdit.key, from=cbEdit.from;
+    openBlockEditor(key,from,B);
+    var n=[B.tr.length+B.act.length+B.ba.length+B.re.length+B.la.length+' entries',B.hp?'HP '+B.hp:'no HP found',B.ac?'AC '+parseInt(B.ac,10):'no AC found'];
+    var st=document.getElementById('cb-status');if(st)st.textContent='Filled in: '+n.join(', ')+'. Check it over, then save.';
+  }
+  // Import: a file of stat blocks (what Claude makes from your uploads), a party sheet backup, or one pasted stat block.
+  function openBlockImport(){
+    dialog('cbimp-dlg','Import stat blocks','<p class="minor" style="margin:0 0 8px">Choose a stat block file, or paste its text. A single stat block pasted as plain text opens in the editor.</p>'+
+      '<input type="file" id="cbimp-file" accept=".json,application/json,.txt,text/plain" aria-label="Stat block file">'+
+      '<textarea id="cbimp-text" style="margin-top:8px" placeholder="Paste here" aria-label="Stat block text"></textarea>'+
+      '<div class="dlg-actions"><button class="primary" id="cbimp-go">Import</button><span class="status" id="cbimp-status"></span></div>');
+  }
+  function importBlocks(txt){
+    var st=document.getElementById('cbimp-status'), d=null;
+    try{d=JSON.parse(txt)}catch(e){d=null}
+    if(!d){var B=parseBlock(txt);if(B.n){var dl0=document.getElementById('cbimp-dlg');if(dl0)dl0.close();openBlockEditor('','add',B);var s0=document.getElementById('cb-status');if(s0)s0.textContent='Read from your text. Check it over, then save.'}else if(st)st.textContent='That isn’t a stat block file or stat block text.';return}
+    var list=Array.isArray(d)?d:Array.isArray(d.blocks)?d.blocks:d.blocks&&typeof d.blocks==='object'?Object.keys(d.blocks).map(function(k){return d.blocks[k]}):d.n?[d]:[];
+    var got=[];
+    list.forEach(function(b){var B=normBlock(b);if(!B)return;var key=/^custom-/.test(b.i||'')?b.i:customKey(B.n);B.i=key;B.custom=true;state.blocks[key]=B;got.push(B.n)});
+    if(!got.length){if(st)st.textContent='No stat blocks found in that.';return}
+    saveState();statusMsg='Imported '+got.length+' stat block'+(got.length===1?'':'s')+': '+got.join(', ')+'. Search for them in Add enemies.';
+    var dl=document.getElementById('cbimp-dlg');if(dl)dl.close();render();
+  }
+  function customList(){return Object.keys(state.blocks).filter(function(k){return /^custom-/.test(k)}).map(function(k){return state.blocks[k]}).sort(function(a,b){return a.n<b.n?-1:1})}
   function pickBest(ix){
     readAddForm();bestBusy=ix;render();
     bestFetch(ix).then(function(B){
@@ -1349,7 +1522,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     Object.keys(state.foes).forEach(function(k){if(state.foes[k].sb)used[state.foes[k].sb]=1});
     state.encs.forEach(function(en){en.foes.forEach(function(f){if(f.sb)used[f.sb]=1})});
     if(addForm.sb)used[addForm.sb]=1;
-    keys.forEach(function(k){if(!used[k])delete state.blocks[k]});
+    keys.forEach(function(k){if(!used[k]&&!/^custom-/.test(k))delete state.blocks[k]});
   }
   function bestSearch(q){
     addForm.q=q;
@@ -1368,8 +1541,13 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
         '<div id="ad-best-res" class="best-res" aria-live="polite">'+bestResHtml(f.q)+'</div>'+
         (B?'<div class="best-pick">📖 <b>'+esc(B.n)+'</b> <span class="minor">CR '+esc(B.cr)+' · AC '+esc(B.ac)+' · HP '+B.hp+(B.hd?' ('+esc(B.hd)+')':'')+'</span>'+
           (B.hd&&/d/.test(B.hd)?'<button data-besthp="'+esc(B.hd)+'" title="Roll HP for each one instead of the average">Roll HP ('+esc(B.hd)+')</button>':'')+
-          '<button class="ghost" id="best-clear" title="Stop using this stat block">✕</button></div>':'')+
-        (bestBusy&&bestBusy!=='ix'?'<p class="minor">Looking it up…</p>':'')+'</div>'+
+          '<button id="cb-edit" title="Change this stat block">Edit</button><button class="ghost" id="best-clear" title="Stop using this stat block">✕</button></div>':'')+
+        (bestBusy&&bestBusy!=='ix'?'<p class="minor">Looking it up…</p>':'')+
+        '<div class="ini-tools"><button id="cb-new" title="Type in your own monster, or paste a stat block">New stat block</button><button id="cb-imp" title="A stat block file, or pasted text">Import stat blocks</button></div>'+
+        (customList().length?'<div class="foes"><span class="lbl">Your stat blocks</span>'+customList().map(function(B){
+          return cbAsk===B.i?'<span class="foe"><button class="primary" data-cbdelyes="'+esc(B.i)+'">Delete '+esc(B.n)+'?</button><button data-cbdelno="1">Keep</button></span>':
+            '<span class="foe"><button data-best="'+esc(B.i)+'" title="Fill in '+esc(B.n)+'">★ '+esc(B.n)+'</button><button class="ghost x" data-cbdel="'+esc(B.i)+'" aria-label="Delete '+esc(B.n)+'" title="Delete">✕</button></span>'}).join('')+'</div>':'')+
+        '</div>'+
       '<div class="pk-row"><label class="stack" style="flex:2;min-width:10em"><span class="lbl">Name</span><input id="ad-name" list="foe-names" value="'+esc(f.name||'')+'" placeholder="Goblin" autocomplete="off"></label>'+
       '<datalist id="foe-names">'+saved.map(function(t){return '<option value="'+esc(t.name)+'">'}).join('')+'</datalist>'+
       '<label class="stack"><span class="lbl">How many</span><input class="n" id="ad-count" inputmode="numeric" value="'+esc(f.count||'1')+'"></label>'+
@@ -1917,6 +2095,17 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
     else if(t.id==='ad-close'){adding=false;render();var ib=document.getElementById('ini-add');if(ib)ib.focus();return}
     else if(t.id==='ad-go'){readAddForm();addEnemies();render();var an=document.getElementById('ad-name');if(an)an.focus();return}
     else if(ds.best){pickBest(ds.best);return}
+    else if(t.id==='cb-new'){readAddForm();openBlockEditor('','add');return}
+    else if(t.id==='cb-edit'){readAddForm();if(addForm.sb)openBlockEditor(addForm.sb,'add');return}
+    else if(t.id==='cb-imp'){readAddForm();openBlockImport();return}
+    else if(t.id==='cb-parse'){parseIntoEditor();return}
+    else if(t.id==='cb-save'){saveBlockEditor();return}
+    else if(t.id==='cbimp-go'){importBlocks((document.getElementById('cbimp-text')||{}).value||'');return}
+    else if(ds.sbedit){var se=entry(ini(),ds.sbedit);if(se&&se.sb&&state.blocks[se.sb])openBlockEditor(se.sb,se.id);return}
+    else if(ds.cbdel){readAddForm();cbAsk=ds.cbdel;render();var cy=document.querySelector('[data-cbdelyes]');if(cy)cy.focus();return}
+    else if(ds.cbdelno){cbAsk='';render();return}
+    else if(ds.cbdelyes){var gb2=state.blocks[ds.cbdelyes];delete state.blocks[ds.cbdelyes];if(addForm.sb===ds.cbdelyes)addForm.sb='';
+      Object.keys(state.foes).forEach(function(k){if(state.foes[k].sb===ds.cbdelyes)state.foes[k].sb=''});cbAsk='';saveState();statusMsg=gb2?'Deleted '+gb2.n+'.':'';render();return}
     else if(ds.besthp){readAddForm();addForm.hp=ds.besthp;render();var hh=document.getElementById('ad-hp');if(hh)hh.focus();return}
     else if(t.id==='best-clear'){readAddForm();addForm.sb='';render();var bb=document.getElementById('ad-best');if(bb)bb.focus();return}
     else if(ds.sbtog){sbOpen[ds.sbtog]=!sbOpen[ds.sbtog];render();var st2=document.querySelector('[data-sbtog="'+ds.sbtog+'"]');if(st2)st2.focus();return}
@@ -2074,6 +2263,7 @@ button.x{padding:0 6px;font-size:.8rem;line-height:1.4}
       '<div class="dlg-actions"><button class="primary" id="load-json">Import</button><span class="status" id="import-status"></span></div>');
   }
   document.addEventListener('change',function(e){
+    if(e.target.id==='cbimp-file'&&e.target.files[0]){var fr2=new FileReader();fr2.onload=function(){document.getElementById('cbimp-text').value=fr2.result;importBlocks(fr2.result)};fr2.readAsText(e.target.files[0]);return}
     if(e.target.id!=='import-file'||!e.target.files[0])return;
     var fr=new FileReader();fr.onload=function(){document.getElementById('import-text').value=fr.result;importText(fr.result);};fr.readAsText(e.target.files[0]);
   });
