@@ -91,6 +91,8 @@
     const d = clone(window.DEFAULT_CHARACTER);
     for (const k of Object.keys(d)) if (s[k] === undefined) s[k] = d[k];
     s.dragon = Object.assign({}, d.dragon, s.dragon || {});
+    if (!Array.isArray(s.dragon.conds)) s.dragon.conds = [];
+    s.dragon.exhaustion = Math.max(0, Math.min(6, +s.dragon.exhaustion || 0));
     s.story = Object.assign({}, d.story, s.story || {});
     s.slotsUsed = (s.slotsUsed || []).concat(Array(10).fill(0)).slice(0, 10);
     s.resUsed = s.resUsed || {};
@@ -274,13 +276,18 @@
     const m = {}; ABIL.forEach((a) => (m[a] = mod(ab[a])));
     const tier = dragonTier(total); const pb = tier.pb;
     const ctx = { mod: (a) => m[a], pb };
-    const hpMax = DRAGON_RULES.hpBase + total + m.con + tier.hp;
+    // the dragon's own conditions and exhaustion work like the rider's (2014 rules)
+    const eff = conditionEffects({ conds: s.dragon.conds || [], exhaustion: s.dragon.exhaustion || 0 });
+    const baseHpMax = DRAGON_RULES.hpBase + total + m.con + tier.hp;
+    const hpMax = eff.hpHalf.length ? Math.floor(baseHpMax / 2) : baseHpMax;
+    const baseSpeed = K.speed || "";
+    const speed = eff.speedZero.length ? baseSpeed.replace(/\d+ ft/g, "0 ft") : eff.speedHalf.length ? baseSpeed.replace(/(\d+) ft/g, (x, n) => Math.floor(n / 2) + " ft") : baseSpeed;
     const sizes = DRAGON_RULES.tiers.map((t) => t.size);
     const unlockIdx = sizes.indexOf(DRAGON_RULES.essence.unlockSize);
     const essence = sizes.indexOf(tier.size) >= unlockIdx && unlockIdx >= 0;
     const unlockTier = DRAGON_RULES.tiers[unlockIdx];
     return {
-      K, corrupted, ab, m, tier, pb, hpMax, essence, unlockLevel: unlockTier ? unlockTier.level : null,
+      K, corrupted, ab, m, tier, pb, hpMax, baseHpMax, eff, speed, baseSpeed, essence, unlockLevel: unlockTier ? unlockTier.level : null,
       essenceMax: DRAGON_RULES.essence.pool(riderPB, total),
       acBase: DRAGON_RULES.acBase + pb,
       ac: DRAGON_RULES.acBase + pb + bonus.ac, acWhy: bonus.why,
@@ -391,7 +398,9 @@
         // base AC: the party sheet adds Dragonwarden wards itself
         name: S.dragon.name || "", kind: D.dragon.K.title || "", ac: g.acBase, dc: g.dc, hit: g.biteHit, pb: g.pb, init: g.m.dex,
         hp: { cur: S.dragon.hpCurrent == null ? g.hpMax : Math.min(S.dragon.hpCurrent, g.hpMax), max: g.hpMax, temp: S.dragon.hpTemp || 0 },
-        breathReady: S.dragon.breathReady !== false
+        breathReady: S.dragon.breathReady !== false,
+        // the dragon's own conditions (party/conds '<rider>-dragon' sets them from the party sheet)
+        conds: (S.dragon.conds || []).slice(), exh: +S.dragon.exhaustion || 0
       }
     };
     lsSet("drsheet-link:" + id, JSON.stringify(rep));
@@ -621,7 +630,8 @@
       if (c.temp) { S.dragon.hpTemp = Math.max(S.dragon.hpTemp || 0, amt); txt = `${nm}: ${amt} temp HP`; }
       else if (c.heal) { const was = cur; cur = Math.min(g.hpMax, cur + amt); txt = `${nm} healed ${cur - was}`; }
       else {
-        const r = defenseFor(g.K.immunities ? g.K.immunities + " immune" : "", type);
+        let r = defenseFor(g.K.immunities ? g.K.immunities + " immune" : "", type);
+        if (!r && (S.dragon.conds || []).includes("petrified")) r = "resist";
         const d = r === "immune" ? 0 : r === "resist" ? Math.floor(amt / 2) : amt;
         const t = Math.min(S.dragon.hpTemp || 0, d); S.dragon.hpTemp = (S.dragon.hpTemp || 0) - t; cur = Math.max(0, cur - (d - t));
         txt = `${nm} took ${d}${type ? " " + type : ""}${r ? ` (${r === "immune" ? "immune" : "halved"})` : ""}${t ? `, ${t} from temp HP` : ""}`;
@@ -729,6 +739,20 @@
         const c = CONDITIONS.find((x) => x[0] === k); if (!c) return;
         if (S.conds.includes(k) !== !!v.on) { S.conds = v.on ? S.conds.concat(k) : S.conds.filter((x) => x !== k); msg.push((v.on ? "" : "removed ") + c[1].toLowerCase()); }
       });
+      // the dragon's conditions and exhaustion arrive under '<rider>-dragon'; times are kept apart from the rider's
+      const mineD = ((s.exists && s.data()) || {})[me + "-dragon"] || {}, dmsg = [];
+      const firstD = !seen.dcondLinked; seen.dcondLinked = true; if (firstD) changed = true;
+      seen.dcond = seen.dcond || {};
+      Object.keys(mineD).forEach((k) => {
+        const v = mineD[k] || {}, at = String(v.at || "");
+        if (!at || at <= (seen.dcond[k] || "")) return; seen.dcond[k] = at; changed = true;
+        if (firstD) return;
+        if (k === "exh") { const x = Math.max(0, Math.min(6, +v.v || 0)); if (x !== +(S.dragon.exhaustion || 0)) { S.dragon.exhaustion = x; dmsg.push(`exhaustion ${x}`); } return; }
+        const c = CONDITIONS.find((x) => x[0] === k); if (!c) return;
+        const list = S.dragon.conds || [];
+        if (list.includes(k) !== !!v.on) { S.dragon.conds = v.on ? list.concat(k) : list.filter((x) => x !== k); dmsg.push((v.on ? "" : "removed ") + c[1].toLowerCase()); }
+      });
+      if (dmsg.length) msg.push(`${S.dragon.name || "your dragon"}: ${dmsg.join(", ")}`);
       if (msg.length) { commit(); toast("The DM set", esc(msg.join(", "))); } else if (celebrate || taken || loot.length) commit(); else if (changed) persist();
       if (loot.length) lootPop(loot);
       if (celebrate) levelParty();
@@ -1082,7 +1106,7 @@
   }
   /* How a d20 roll should be made right now: { mode: "normal"|"adv"|"dis", why, fail } */
   function rollState(kind, D) {
-    const E = D.eff; const adv = [], dis = []; let fail = [];
+    const E = kind && kind.dragon ? D.dragon.eff : D.eff; const adv = [], dis = []; let fail = [];
     if (kind) {
       if (kind.type === "attack") { adv.push(...E.atkAdv); dis.push(...E.atkDis); }
       if (kind.type === "check") dis.push(...E.checkDis);
@@ -1096,16 +1120,25 @@
     if (dis.length) return { mode: "dis", why: u(dis), fail };
     return { mode: "normal", why: "", fail };
   }
-  function condStrip(D) {
-    const on = new Set(S.conds);
-    const chips = CONDITIONS.map(([k, n, , t]) => `<button class="cchip ${on.has(k) ? "on" : ""}" data-act="cond" data-k="${k}" aria-pressed="${on.has(k)}" title="${esc(t)}">${n}</button>`).join("");
-    const lines = D.eff.lines.map(([c, t]) => `<li class="${c}">${esc(t)}</li>`).join("");
+  function dragonCantAct(g) {
+    if (!g.eff.cantAct.length) return false;
+    toast(`${esc(S.dragon.name || "Your dragon")} can't act`, `It can't take actions or reactions while ${esc([...new Set(g.eff.cantAct)].join(", ").toLowerCase())}.`);
+    return true;
+  }
+  /* who: "rider" (the strip under the stats) or "dragon" (the Dragon bond tab). Same rules for both. */
+  function condStrip(D, who = "rider") {
+    const dr = who === "dragon";
+    const on = new Set(dr ? S.dragon.conds || [] : S.conds);
+    const E = dr ? D.dragon.eff : D.eff, exh = dr ? S.dragon.exhaustion || 0 : S.exhaustion;
+    const nm = dr ? S.dragon.name || "Your dragon" : "";
+    const chips = CONDITIONS.map(([k, n, , t]) => `<button class="cchip ${on.has(k) ? "on" : ""}" data-act="${dr ? "dcond" : "cond"}" data-k="${k}" aria-pressed="${on.has(k)}" title="${esc(t)}">${n}</button>`).join("");
+    const lines = E.lines.map(([c, t]) => `<li class="${c}">${esc(t)}</li>`).join("");
     const active = CONDITIONS.filter((c) => on.has(c[0]));
-    return `<section class="panel conds" aria-label="Conditions">
-      <div class="ph"><h2>Conditions</h2>
-        <label class="small">Exhaustion <select id="f-exhaustion" class="f" style="width:auto;padding:1px 4px" data-bind="exhaustion" data-num="1">${[0, 1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${S.exhaustion == n ? "selected" : ""}>${n}${n ? " · " + EXHAUSTION[n] : " · none"}</option>`).join("")}</select></label></div>
+    return `<section class="panel conds" aria-label="${dr ? esc(nm) + "'s conditions" : "Conditions"}">
+      <div class="ph"><h2>${dr ? `${esc(nm)}'s conditions` : "Conditions"}</h2>
+        <label class="small">Exhaustion <select id="${dr ? "f-dexhaustion" : "f-exhaustion"}" class="f" style="width:auto;padding:1px 4px" data-bind="${dr ? "dragon.exhaustion" : "exhaustion"}" data-num="1">${[0, 1, 2, 3, 4, 5, 6].map((n) => `<option value="${n}" ${exh == n ? "selected" : ""}>${n}${n ? " · " + EXHAUSTION[n] : " · none"}</option>`).join("")}</select></label></div>
       <div class="cchips">${chips}</div>
-      ${lines ? `<ul class="effects">${lines}</ul>` : `<p class="small muted" style="margin:8px 0 0">No conditions. Click one to apply it; its effects update your speed, HP and rolls automatically.</p>`}
+      ${lines ? `<ul class="effects">${lines}</ul>` : `<p class="small muted" style="margin:8px 0 0">${dr ? `No conditions on ${esc(nm)}. Click one to apply it; its speed, HP and rolls update automatically.` : "No conditions. Click one to apply it; its effects update your speed, HP and rolls automatically."}</p>`}
       ${active.length ? `<details class="small" style="margin-top:6px"><summary>What these conditions do</summary>${active.map((c) => `<p style="margin:4px 0"><b>${c[1]}:</b> ${esc(c[3])}</p>`).join("")}</details>` : ""}
     </section>`;
   }
@@ -1362,6 +1395,7 @@
         ${artCard("dragon", nm)}
         <section class="panel">
           <div class="ph"><h2>Trackers</h2><span class="chip arc">${g.tier.size} · PB ${sg(g.pb)}</span></div>
+          ${g.eff.cantAct.length ? `<p class="small" style="margin:0 0 8px;color:var(--bad)"><b>Can't take actions or reactions</b> (${esc([...new Set(g.eff.cantAct)].join(", "))})</p>` : ""}
           <div class="hp" style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:center">
             <div><span class="label">Dragon HP</span><div class="hp-big">${cur}<small> / ${g.hpMax}</small>${dS.hpTemp ? ` <small style="color:var(--arc)">+${dS.hpTemp} temp</small>` : ""}</div></div>
             <div class="hp-ctl"><input id="dhp-amt" class="f n" type="number" min="0" aria-label="Dragon HP amount" placeholder="0">
@@ -1387,6 +1421,7 @@
               : `<button class="btn sm arc" data-act="dUse" data-k="${esc(f.name)}">Use</button>`}</div></div>`; }).join("")}
           <div class="res"><div><b>Bite</b> <span class="small muted">${sg(g.biteHit)} to hit</span></div><button class="btn sm" data-act="bite">${physical() ? "Attack" : "Roll attack"}</button></div>
         </section>
+        ${condStrip(D, "dragon")}
         <section class="panel"><h2>Bond & name</h2>
           <label class="small">Dragon's name ${inp("dragon.name", { label: "Dragon name", ph: (K.nameIdeas || []).join(", ") })}</label>
           ${K.nameIdeas ? `<p class="small muted" style="margin:6px 0 10px">Name ideas: ${esc(K.nameIdeas.join(", "))}</p>` : ""}
@@ -1399,12 +1434,12 @@
           <div class="small" style="font-style:italic">${g.tier.size} Dragon (${esc(K.title || "")}), unaligned · bonded to ${esc(S.name.split(" ")[0])}</div>
           <hr class="sb-rule">
           <div class="sb-line"><b>Armor Class</b> ${g.ac} <span class="muted small">(13 + PB, natural armor${g.acWhy.length ? "; " + esc(g.acWhy.join(", ")) : ""})</span></div>
-          <div class="sb-line"><b>Hit Points</b> ${g.hpMax} <span class="muted small">(${DRAGON_RULES.hpBase} + rider level ${D.total} + CON ${sg(g.m.con)}${g.tier.hp ? " + growth " + g.tier.hp : ""})</span></div>
-          <div class="sb-line"><b>Speed</b> ${esc(K.speed || "")}</div>
+          <div class="sb-line"><b>Hit Points</b> ${g.hpMax} <span class="muted small">(${DRAGON_RULES.hpBase} + rider level ${D.total} + CON ${sg(g.m.con)}${g.tier.hp ? " + growth " + g.tier.hp : ""})${g.hpMax !== g.baseHpMax ? `, halved by exhaustion from ${g.baseHpMax}` : ""}</span></div>
+          <div class="sb-line"><b>Speed</b> ${esc(g.speed)}${g.speed !== g.baseSpeed ? ` <span class="small" style="color:var(--bad)">(normally ${esc(g.baseSpeed)})</span>` : ""}</div>
           <hr class="sb-rule">
           <div class="sb-abil">${abil}</div>
           <hr class="sb-rule">
-          <div class="sb-line"><b>Saving Throws</b> ${saves}</div>
+          <div class="sb-line"><b>Saving Throws</b> ${saves}${ABIL.some((a) => g.eff.saveFail[a].length || g.eff.saveDis[a].length) ? ` <span class="small" style="color:var(--bad)">(${ABIL.filter((a) => g.eff.saveFail[a].length).length ? "fails STR and DEX saves" : (ABIL.every((a) => g.eff.saveDis[a].length) ? "disadvantage on all saves" : "disadvantage on " + ABIL.filter((a) => g.eff.saveDis[a].length).map((a) => a.toUpperCase()).join(", ") + " saves")})</span>` : ""}</div>
           <div class="sb-line"><b>Damage Immunities</b> ${esc(K.immunities || "—")}</div>
           <div class="sb-line"><b>Senses</b> ${esc(K.senses || "")}, passive Perception ${g.pp}</div>
           ${K.languages ? `<div class="sb-line"><b>Languages</b> ${esc(K.languages)}</div>` : ""}
@@ -1450,8 +1485,41 @@
   }
 
   /* ---- Inventory ---- */
+  /* ---- Bags (2014 extradimensional containers) ----
+     A Bag of Holding, Handy Haversack or Portable Hole row keeps its own `contents` list. Things inside don't count
+     toward carried weight; the container's own weight does. Capacity follows the Dungeon Master's Guide. */
+  function bagInfo(it) {
+    const n = String((it && it.name) || "");
+    if (/bag of holding/i.test(n)) return { cap: 500, note: "holds 500 lb, not more than 64 cubic ft" };
+    if (/handy haversack/i.test(n)) return { cap: 120, note: "two side pouches of 20 lb each and a central pouch of 80 lb" };
+    if (/portable hole/i.test(n)) return { cap: null, note: "a hole 6 ft across and 10 ft deep; no weight limit" };
+    return null;
+  }
+  const bagWeight = (it) => (it.contents || []).reduce((x, c) => x + (+c.qty || 0) * (+c.wt || 0), 0);
+  function bagExtra(it, i, bags) {
+    const B = bagInfo(it); let out = "";
+    if (UI.stowPick === i) out += `<tr><td colspan="6" style="background:var(--panel-2)"><div class="choice"><span class="small">Put ${esc(it.name || "this")} in:</span>
+      ${bags.map((b) => `<button class="btn sm" data-act="stowTo" data-i="${i}" data-b="${b}">${esc(S.inventory[b].name)}</button>`).join("")}<button class="btn sm" data-act="stow" data-i="${i}">Cancel</button></div></td></tr>`;
+    if (!B) return out;
+    const list = it.contents || [], w = Math.round(bagWeight(it) * 10) / 10, over = B.cap != null && w > B.cap, open = !(UI.bagClosed || {})[i];
+    const rows = list.map((c, j) => `<tr>
+        <td><input id="f-inv-${i}-c-${j}-name" class="f" data-bind="inventory.${i}.contents.${j}.name" value="${esc(c.name)}" aria-label="Item in the bag"></td>
+        <td><input id="f-inv-${i}-c-${j}-qty" class="f n" type="number" data-num="1" data-bind="inventory.${i}.contents.${j}.qty" value="${esc(c.qty)}" aria-label="Quantity"></td>
+        <td><input id="f-inv-${i}-c-${j}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.contents.${j}.wt" value="${esc(c.wt)}" aria-label="Weight each"></td>
+        <td><input id="f-inv-${i}-c-${j}-notes" class="f" data-bind="inventory.${i}.contents.${j}.notes" value="${esc(c.notes)}" aria-label="Notes"></td>
+        <td style="white-space:nowrap"><button class="btn sm" style="padding:1px 7px" data-act="unstow" data-i="${i}" data-j="${j}">Take out</button><button class="icon-btn" data-act="delBagItem" data-i="${i}" data-j="${j}" aria-label="Remove ${esc(c.name)}">✕</button></td></tr>`).join("");
+    return out + `<tr class="bag-row"><td colspan="6">
+      <div class="bag-box">
+        <div class="ph"><span><b>Inside the ${esc(it.name)}</b> <span class="small ${over ? "" : "muted"}" style="${over ? "color:var(--bad);font-weight:700" : ""}">${list.length} item${list.length === 1 ? "" : "s"} · ${w} lb${B.cap != null ? ` of ${B.cap} lb` : ""}${over ? " · over capacity" : ""}</span></span>
+          <span class="choice"><button class="btn sm" data-act="addBagItem" data-i="${i}">Add to bag</button><button class="btn sm" data-act="bagToggle" data-i="${i}" aria-expanded="${open}">${open ? "Hide" : "Show"}</button></span></div>
+        ${open ? (list.length ? `<div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+          : `<p class="small muted" style="margin:6px 0 0">Empty. Use "Into bag" on an item above, or Add to bag.</p>`)
+          + `<p class="small muted" style="margin:6px 0 0">The bag ${esc(B.note)}. What's inside doesn't count toward what you carry. Taking something out takes an action.</p>` : ""}
+      </div></td></tr>`;
+  }
   function inventory(D) {
     const catName = { light: "Light armor", medium: "Medium armor", heavy: "Heavy armor", shield: "Shield" };
+    const bags = S.inventory.map((it, i) => (bagInfo(it) ? i : -1)).filter((i) => i >= 0);
     const rows = S.inventory.map((it, i) => {
       const A = it.armor;
       const wear = A ? `<button class="btn sm ${it.worn ? "primary" : ""}" data-act="wear" data-i="${i}" aria-pressed="${!!it.worn}" title="${it.worn ? "Take it off" : "Put it on"}">${it.worn ? (A.cat === "shield" ? "Wielded" : "Worn") : A.cat === "shield" ? "Wield" : "Wear"}</button>` : "";
@@ -1462,8 +1530,8 @@
       <td><input id="f-inv-${i}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.wt" value="${esc(it.wt)}" aria-label="Weight each"></td>
       <td><input id="f-inv-${i}-notes" class="f" data-bind="inventory.${i}.notes" value="${esc(it.notes)}" aria-label="Notes"></td>
       <td>${wear}</td>
-      <td style="white-space:nowrap"><button class="icon-btn edit" data-act="invEdit" data-i="${i}" aria-label="Armor settings for ${esc(it.name)}" aria-expanded="${UI.invEdit === i}">✎</button><button class="icon-btn" data-act="delItem" data-i="${i}" aria-label="Remove ${esc(it.name)}">✕</button></td></tr>`;
-      if (UI.invEdit !== i) return main;
+      <td style="white-space:nowrap">${bags.length && !bagInfo(it) ? `<button class="btn sm" style="padding:1px 7px;margin-right:4px" data-act="stow" data-i="${i}" title="Put this in ${bags.length === 1 ? esc(S.inventory[bags[0]].name) : "a bag"}">Into bag</button>` : ""}<button class="icon-btn edit" data-act="invEdit" data-i="${i}" aria-label="Armor settings for ${esc(it.name)}" aria-expanded="${UI.invEdit === i}">✎</button><button class="icon-btn" data-act="delItem" data-i="${i}" aria-label="Remove ${esc(it.name)}">✕</button></td></tr>`;
+      if (UI.invEdit !== i) return main + bagExtra(it, i, bags);
       const box = A ? `<div class="inline-grid">
           <label class="small">Kind<select id="f-inv-${i}-cat" class="f" data-bind="inventory.${i}.armor.cat">${["light", "medium", "heavy", "shield"].map((c) => `<option value="${c}" ${A.cat === c ? "selected" : ""}>${catName[c]}</option>`).join("")}</select></label>
           <label class="small">${A.cat === "shield" ? "AC bonus" : "Base AC"}${inp(`inventory.${i}.armor.ac`, { num: 1, label: "Armor AC" })}</label>
@@ -1473,7 +1541,7 @@
         </div><div class="choice" style="margin-top:8px"><button class="btn sm" data-act="invEdit" data-i="${i}">Done</button><button class="btn sm" data-act="notArmor" data-i="${i}">It's not armor</button></div>`
         : `<p class="small" style="margin:0 0 8px">Is this armor or a shield? Turn it into one so it can be worn and counted in your AC.</p>
           <div class="choice"><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="light">Light armor</button><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="medium">Medium armor</button><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="heavy">Heavy armor</button><button class="btn sm" data-act="makeArmor" data-i="${i}" data-k="shield">Shield</button><button class="btn sm" data-act="invEdit" data-i="${i}">Cancel</button></div>`;
-      return main + `<tr><td colspan="6" style="background:var(--panel-2)">${box}</td></tr>`;
+      return main + `<tr><td colspan="6" style="background:var(--panel-2)">${box}</td></tr>` + bagExtra(it, i, bags);
     }).join("");
     const armorOpts = (window.ARMOR || []).map((r) => `<option value="${esc(r[0])}">${esc(r[0])} · ${r[1] === "shield" ? "+2 AC" : r[1] + ", AC " + r[2]}</option>`).join("");
     const coins = ["cp", "sp", "ep", "gp", "pp"].map((c) => `<label class="stat"><span class="label">${c}</span>${inp("coins." + c, { num: 1, label: c, style: "width:100%" })}</label>`).join("");
@@ -1497,7 +1565,7 @@
         <section class="panel"><h2>Coins</h2><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px">${coins}</div></section>
         <section class="panel"><h2>Carrying</h2>
           <dl class="kv"><dt>Carried</dt><dd class="num" style="color:${over ? "var(--bad)" : "inherit"}">${Math.round(D.weight * 10) / 10} lb</dd>
-          <dt>Capacity</dt><dd class="num">${D.carry} lb</dd><dt>Push / drag / lift</dt><dd class="num">${D.carry * 2} lb</dd></dl></section>
+          ${bags.length ? `<dt>In bags</dt><dd class="num">${Math.round(bags.reduce((x, b) => x + bagWeight(S.inventory[b]), 0) * 10) / 10} lb <span class="small muted">(not counted)</span></dd>` : ""}<dt>Capacity</dt><dd class="num">${D.carry} lb</dd><dt>Push / drag / lift</dt><dd class="num">${D.carry * 2} lb</dd></dl></section>
         <section class="panel"><h2>Magic items</h2><p class="small" style="margin:0">${S.magicItems.length} item${S.magicItems.length === 1 ? "" : "s"} · attuned to ${att} of 3.</p>
           <button class="btn sm" style="margin-top:8px" data-act="tab" data-tab="magic">Open Magic items</button></section>
       </div></div>`;
@@ -2157,6 +2225,7 @@
     },
     breath: () => {
       const D = derive(); const g = D.dragon;
+      if (dragonCantAct(g)) return;
       if (g.essence) { const left = g.essenceMax - S.dragon.essenceUsed; if (left < 2) { toast("Not enough Essence", "Breath costs 2 points."); return; } S.dragon.essenceUsed += 2; }
       S.dragon.breathReady = false; commit();
       const save = `DC ${g.dc} ${(g.K.breath.save || "dex").toUpperCase()} save`; const ess = g.essence ? " · 2 Essence spent" : "";
@@ -2181,6 +2250,7 @@
     },
     guard: () => {
       const g = derive().dragon; const f = g.feats.find((x) => x.kind === "Reaction"); if (!f) return;
+      if (dragonCantAct(g)) return;
       S.dragon.guardUsed = true; commit();
       if (!f.dice) { toast(`${esc(f.name)} used`, esc(f.text)); return; }
       const bm = f.diceAbil ? g.m[f.diceAbil] : 0; const verb = f.verb || "roll";
@@ -2192,8 +2262,8 @@
     dUseReset: (e) => { (S.dragon.used = S.dragon.used || {})[e.dataset.k] = false; commit(); },
     bite: () => {
       const g = derive().dragon; const K = g.K; const dice = (K.bite ? K.bite.dice : "1d6") + sg(g.m.str).replace("−", "-"); const type = K.bite ? K.bite.type : "piercing";
-      if (physical()) { d20("Bite", g.biteHit, "", `Damage on a hit: ${dice} ${type}`); return; }
-      const r = roll(dice); d20("Bite", g.biteHit, `damage ${r.total} ${type}`);
+      if (physical()) { if (dragonCantAct(g)) return; d20("Bite", g.biteHit, "", `Damage on a hit: ${dice} ${type}`, { type: "attack", dragon: true }); return; }
+      if (dragonCantAct(g)) return; const r = roll(dice); d20("Bite", g.biteHit, `damage ${r.total} ${type}`, "", { type: "attack", dragon: true });
     },
     diceMode: (e) => { S.diceMode = e.dataset.k; commit(); toast(S.diceMode === "physical" ? "Rolling your own dice" : "The sheet rolls for you", S.diceMode === "physical" ? "Buttons show what to roll and track what you spend." : "Buttons roll dice and show results."); },
     saveProf: (e) => { const a = e.dataset.k; S.saveProf = S.saveProf.includes(a) ? S.saveProf.filter((x) => x !== a) : S.saveProf.concat(a); commit(); },
@@ -2212,6 +2282,12 @@
     },
     atkEdit: (e, ev) => { if (ev) ev.stopPropagation(); const i = +e.dataset.i; UI.atkEdit = UI.atkEdit === i ? null : i; render(); },
     delAttack: (e) => { S.attacks.splice(+e.dataset.i, 1); UI.atkEdit = null; commit(); },
+    dcond: (e) => {
+      const k = e.dataset.k; const list = S.dragon.conds || []; const on = list.includes(k);
+      S.dragon.conds = on ? list.filter((x) => x !== k) : list.concat(k);
+      if (!on && k === "unconscious" && !S.dragon.conds.includes("prone")) S.dragon.conds.push("prone"); // unconscious creatures fall prone
+      commit();
+    },
     cond: (e) => {
       const k = e.dataset.k; const on = S.conds.includes(k);
       S.conds = on ? S.conds.filter((x) => x !== k) : S.conds.concat(k);
@@ -2219,7 +2295,37 @@
       commit();
     },
     addItem: () => { S.inventory.push({ name: "", qty: 1, wt: 0, notes: "" }); commit(); const i = S.inventory.length - 1; const el = document.getElementById(`f-inv-${i}-name`); if (el) el.focus(); },
-    delItem: (e) => { S.inventory.splice(+e.dataset.i, 1); UI.invEdit = null; commit(); },
+    delItem: (e) => {
+      const it = S.inventory.splice(+e.dataset.i, 1)[0]; UI.invEdit = null; UI.stowPick = null; UI.bagClosed = {};
+      // removing a bag tips what was inside back into Equipment instead of losing it
+      if (it && (it.contents || []).length) { S.inventory.push(...it.contents); toast(`Emptied the ${esc(it.name)}`, "What was inside is back in your equipment."); }
+      commit();
+    },
+    stow: (e) => {
+      const i = +e.dataset.i; const bags = S.inventory.map((it, k) => (bagInfo(it) ? k : -1)).filter((k) => k >= 0);
+      if (bags.length === 1) { A.stowTo({ dataset: { i, b: bags[0] } }); return; }
+      UI.stowPick = UI.stowPick === i ? null : i; render();
+    },
+    stowTo: (e) => {
+      const i = +e.dataset.i, b = +e.dataset.b, it = S.inventory[i], bag = S.inventory[b]; if (!it || !bag || i === b) return;
+      if (bagInfo(it)) { toast("Not moved", "Putting one extradimensional container inside another destroys both and opens a gate to the Astral Plane."); return; }
+      S.inventory.splice(i, 1); if (it.worn) it.worn = false;
+      (bag.contents = bag.contents || []).push(it);
+      UI.stowPick = null; UI.invEdit = null; UI.bagClosed = {}; commit();
+      toast(`${esc(it.name || "Item")} is in the ${esc(bag.name)}`, "It no longer counts toward what you carry.");
+    },
+    unstow: (e) => {
+      const bag = S.inventory[+e.dataset.i]; if (!bag) return;
+      const it = (bag.contents || []).splice(+e.dataset.j, 1)[0]; if (!it) return;
+      S.inventory.push(it); commit(); toast(`Took out ${esc(it.name || "the item")}`, "It's back in your equipment.");
+    },
+    addBagItem: (e) => {
+      const i = +e.dataset.i, bag = S.inventory[i]; (bag.contents = bag.contents || []).push({ name: "", qty: 1, wt: 0, notes: "" });
+      (UI.bagClosed = UI.bagClosed || {})[i] = false; commit();
+      const el = document.getElementById(`f-inv-${i}-c-${bag.contents.length - 1}-name`); if (el) el.focus();
+    },
+    delBagItem: (e) => { const bag = S.inventory[+e.dataset.i]; if (bag && bag.contents) { bag.contents.splice(+e.dataset.j, 1); commit(); } },
+    bagToggle: (e) => { const i = +e.dataset.i; UI.bagClosed = UI.bagClosed || {}; UI.bagClosed[i] = !UI.bagClosed[i]; render(); },
     // armor: one suit and one shield worn at a time
     wear: (e) => {
       const it = S.inventory[+e.dataset.i]; if (!it || !it.armor) return;
