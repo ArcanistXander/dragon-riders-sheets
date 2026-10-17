@@ -1197,7 +1197,7 @@
     const groups = [["simple", "melee", "Simple melee"], ["simple", "ranged", "Simple ranged"], ["martial", "melee", "Martial melee"], ["martial", "ranged", "Martial ranged"]];
     const opts = groups.map(([cat, kind, label]) => `<optgroup label="${label}">${(window.WEAPONS || []).filter((w) => w[1] === cat && w[2] === kind).map((w) => `<option value="${esc(w[0])}">${esc(w[0])} · ${w[3]} ${w[4]}${isProficient(w[0], w[1]) ? "" : " (not proficient)"}</option>`).join("")}</optgroup>`).join("");
     const ds = D.classes.find((cl) => cl.feats.some((f) => f.name === "Divine Strike"));
-    return `<div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+    return `<div class="grid2 g21">
       <div class="stack">
         ${D.eff.cantAct.length ? `<section class="panel" style="border-color:var(--bad)"><b style="color:var(--bad)">You can't take actions or reactions</b> <span class="small muted">(${esc(D.eff.cantAct.join(", "))})</span></section>` : ""}
         <section class="panel"><div class="ph"><h2>Melee weapons</h2>${modeChip}</div>${table("melee")}</section>
@@ -1254,7 +1254,7 @@
       const head = L === 0 ? `Cantrips <span class="small muted">${S.cantrips.length} / ${c.cantrips} known</span>` : `${ORD[L]} level <span class="small muted">${D.slots[L - 1] - S.slotsUsed[L]} of ${D.slots[L - 1]} slots left</span>`;
       html += `<div class="splevel"><h3>${head}</h3>${items.map((sp) => spellRow(sp, c, D)).join("")}${extra.map((x) => extraRow(x)).join("")}</div>`;
     }
-    return `<div class="grid2" style="grid-template-columns:minmax(0,1fr)">
+    return `<div class="grid2 g1">
       <section class="panel">
         <div class="ph"><h2>Spellcasting · ${esc(c.C.name)}</h2>
           <span class="seg" role="group" aria-label="Spell list view">
@@ -1288,7 +1288,7 @@
           <div class="small muted">${esc(x.notes || "")}${esc(dcAtk)}</div></div></div>
         ${open ? `<div class="sp-body"><div class="small muted">${ORD[sp.level]}${sp.level ? " level" : ""} ${esc(sp.school.toLowerCase())} · ${esc(sp.comp)}</div><p style="margin:4px 0 0">${esc(sp.text)}</p></div>` : ""}</div>`;
     }).join("");
-    return `<div class="grid2" style="grid-template-columns:minmax(0,1fr)"><section class="panel">
+    return `<div class="grid2 g1"><section class="panel">
       <div class="ph"><h2>Spells</h2></div>
       <p class="small muted" style="margin:0 0 10px">${esc(S.name.split(" ")[0])} has no spellcasting class. These come from race, feats or items and need no spell slots. Tap a name for the full text.</p>
       <div class="splevel">${rows || `<p class="small muted">No spells.</p>`}</div>
@@ -1504,15 +1504,15 @@
     const list = it.contents || [], w = Math.round(bagWeight(it) * 10) / 10, over = B.cap != null && w > B.cap, open = !(UI.bagClosed || {})[i];
     const rows = list.map((c, j) => `<tr>
         <td><input id="f-inv-${i}-c-${j}-name" class="f" data-bind="inventory.${i}.contents.${j}.name" value="${esc(c.name)}" aria-label="Item in the bag"></td>
-        <td><input id="f-inv-${i}-c-${j}-qty" class="f n" type="number" data-num="1" data-bind="inventory.${i}.contents.${j}.qty" value="${esc(c.qty)}" aria-label="Quantity"></td>
-        <td><input id="f-inv-${i}-c-${j}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.contents.${j}.wt" value="${esc(c.wt)}" aria-label="Weight each"></td>
-        <td><input id="f-inv-${i}-c-${j}-notes" class="f" data-bind="inventory.${i}.contents.${j}.notes" value="${esc(c.notes)}" aria-label="Notes"></td>
+        <td data-label="Qty"><input id="f-inv-${i}-c-${j}-qty" class="f n" type="number" data-num="1" data-bind="inventory.${i}.contents.${j}.qty" value="${esc(c.qty)}" aria-label="Quantity"></td>
+        <td data-label="Lb each"><input id="f-inv-${i}-c-${j}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.contents.${j}.wt" value="${esc(c.wt)}" aria-label="Weight each"></td>
+        <td data-label="Notes"><input id="f-inv-${i}-c-${j}-notes" class="f" data-bind="inventory.${i}.contents.${j}.notes" value="${esc(c.notes)}" aria-label="Notes"></td>
         <td style="white-space:nowrap"><button class="btn sm" style="padding:1px 7px" data-act="unstow" data-i="${i}" data-j="${j}">Take out</button><button class="icon-btn" data-act="delBagItem" data-i="${i}" data-j="${j}" aria-label="Remove ${esc(c.name)}">✕</button></td></tr>`).join("");
     return out + `<tr class="bag-row"><td colspan="6">
       <div class="bag-box">
         <div class="ph"><span><b>Inside the ${esc(it.name)}</b> <span class="small ${over ? "" : "muted"}" style="${over ? "color:var(--bad);font-weight:700" : ""}">${list.length} item${list.length === 1 ? "" : "s"} · ${w} lb${B.cap != null ? ` of ${B.cap} lb` : ""}${over ? " · over capacity" : ""}</span></span>
           <span class="choice"><button class="btn sm" data-act="addBagItem" data-i="${i}">Add to bag</button><button class="btn sm" data-act="bagToggle" data-i="${i}" aria-expanded="${open}">${open ? "Hide" : "Show"}</button></span></div>
-        ${open ? (list.length ? `<div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        ${open ? (list.length ? `<div class="tw"><table class="t inv-t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
           : `<p class="small muted" style="margin:6px 0 0">Empty. Use "Into bag" on an item above, or Add to bag.</p>`)
           + `<p class="small muted" style="margin:6px 0 0">The bag ${esc(B.note)}. What's inside doesn't count toward what you carry. Taking something out takes an action.</p>` : ""}
       </div></td></tr>`;
@@ -1526,9 +1526,9 @@
       const sub = A ? `<div class="small muted" style="margin-top:2px">${catName[A.cat] || "Armor"} · ${A.cat === "shield" ? sg(+A.ac || 2) + " AC" : "AC " + (+A.ac || 10)}${+A.magic ? ` · +${A.magic} magic` : ""}${+A.str ? ` · STR ${A.str}` : ""}${A.stealth ? " · Stealth disadv." : ""}</div>` : "";
       const main = `<tr>
       <td><input id="f-inv-${i}-name" class="f" data-bind="inventory.${i}.name" value="${esc(it.name)}" aria-label="Item name">${sub}</td>
-      <td><input id="f-inv-${i}-qty" class="f n" type="number" data-num="1" data-bind="inventory.${i}.qty" value="${esc(it.qty)}" aria-label="Quantity"></td>
-      <td><input id="f-inv-${i}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.wt" value="${esc(it.wt)}" aria-label="Weight each"></td>
-      <td><input id="f-inv-${i}-notes" class="f" data-bind="inventory.${i}.notes" value="${esc(it.notes)}" aria-label="Notes"></td>
+      <td data-label="Qty"><input id="f-inv-${i}-qty" class="f n" type="number" data-num="1" data-bind="inventory.${i}.qty" value="${esc(it.qty)}" aria-label="Quantity"></td>
+      <td data-label="Lb each"><input id="f-inv-${i}-wt" class="f n" type="number" step="0.5" data-num="1" data-bind="inventory.${i}.wt" value="${esc(it.wt)}" aria-label="Weight each"></td>
+      <td data-label="Notes"><input id="f-inv-${i}-notes" class="f" data-bind="inventory.${i}.notes" value="${esc(it.notes)}" aria-label="Notes"></td>
       <td>${wear}</td>
       <td style="white-space:nowrap">${bags.length && !bagInfo(it) ? `<button class="btn sm" style="padding:1px 7px;margin-right:4px" data-act="stow" data-i="${i}" title="Put this in ${bags.length === 1 ? esc(S.inventory[bags[0]].name) : "a bag"}">Into bag</button>` : ""}<button class="icon-btn edit" data-act="invEdit" data-i="${i}" aria-label="Armor settings for ${esc(it.name)}" aria-expanded="${UI.invEdit === i}">✎</button><button class="icon-btn" data-act="delItem" data-i="${i}" aria-label="Remove ${esc(it.name)}">✕</button></td></tr>`;
       if (UI.invEdit !== i) return main + bagExtra(it, i, bags);
@@ -1547,11 +1547,11 @@
     const coins = ["cp", "sp", "ep", "gp", "pp"].map((c) => `<label class="stat"><span class="label">${c}</span>${inp("coins." + c, { num: 1, label: c, style: "width:100%" })}</label>`).join("");
     const over = D.weight > D.carry;
     const att = S.magicItems.filter((m) => m.attuned).length;
-    return `<div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+    return `<div class="grid2 g21">
       <div class="stack">
         ${potionPanel(D)}
         <section class="panel"><div class="ph"><h2>Equipment</h2><button class="btn sm" data-act="addItem">Add item</button></div>
-          <div class="tw"><table class="t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th>Wear</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+          <div class="tw"><table class="t inv-t"><thead><tr><th>Item</th><th>Qty</th><th>Lb each</th><th>Notes</th><th>Wear</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
         </section>
       </div>
       <div class="stack">
@@ -1638,7 +1638,7 @@
         ${pips}${edit}</div>`;
     }).join("");
     const opts = (window.MAGIC_ITEMS || []).map((m) => `<option value="${esc(m.name)}">${esc(m.name)} · ${esc(m.rarity)}${m.attune ? " · attunement" : ""}</option>`).join("");
-    return `<div class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+    return `<div class="grid2 g21">
       <section class="panel"><div class="ph"><h2>Magic items</h2><button class="btn sm" data-act="miCustom">Custom item</button></div>
         ${cards || `<p class="small muted" style="margin:0">No magic items yet. Add one from the list, or make a custom item for something the DM invented.</p>`}</section>
       <div class="stack">
@@ -2538,6 +2538,45 @@
     }
   });
 
+  /* Layout styles shared by every sheet page (each page carries its own colors and base styles).
+     Wide two-column tabs (Attacks, Inventory, Magic items) stack into one column on phones. */
+  (function sharedStyles() {
+    if (document.getElementById("engine-css")) return;
+    const st = document.createElement("style"); st.id = "engine-css";
+    st.textContent = `
+      .grid2.g21 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+      .grid2.g1 { grid-template-columns: minmax(0, 1fr); }
+      @media (max-width: 760px) {
+        .grid2.g21 { grid-template-columns: minmax(0, 1fr); }
+        #app { padding-inline: 12px; }
+        .panel { padding: 12px; }
+        .hero-portrait { width: 60px; height: 60px; }
+        .hero-actions .btn { padding: 5px 10px; }
+        .tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); }
+        .tab { padding: 9px 11px; }
+        dl.kv { grid-template-columns: minmax(0, 1fr); gap: 0; }
+        dl.kv dt { padding-top: 8px; }
+        table.t td, table.t th { padding: 5px 4px; }
+        table.t input.f { padding: 4px 5px; }
+        table.t input.n { width: 3.4em; }
+        /* equipment rows become small cards: name, then qty / weight / notes, then the buttons */
+        table.inv-t, table.inv-t tbody { display: block; }
+        table.inv-t thead { display: none; }
+        table.inv-t tr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 6px 10px; align-items: end; padding: 8px 0; border-bottom: 1px solid var(--line); }
+        table.inv-t td { display: block; border: 0; padding: 0; min-width: 0; }
+        table.inv-t td:first-child, table.inv-t td[colspan] { grid-column: 1 / -1; }
+        table.inv-t td:nth-child(n+5) { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        table.inv-t td:nth-child(5) { grid-column: 1 / 3; }
+        table.inv-t td:nth-child(6) { grid-column: 3 / -1; justify-content: flex-end; }
+        table.inv-t td:nth-child(n+5):empty { display: none; }
+        table.inv-t td[data-label]::before { content: attr(data-label); display: block; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
+        table.inv-t input.n { width: 4.2em; }
+        .bag-row > td { padding: 0 !important; }
+        .modal-bg { padding: 8px; }
+        .modal header, .modal .mb, .modal footer { padding-inline: 14px; }
+      }`;
+    document.head.appendChild(st);
+  })();
   render();
   initSync();
 })();
